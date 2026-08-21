@@ -1,67 +1,289 @@
-import Image from "next/image";
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import Sidebar from "./Components/sidebar";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getInitials } from "@/lib/user-display";
 
 export default function Home() {
+  const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+      setFullName((data.user?.user_metadata?.full_name as string | undefined) ?? null);
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setEmail(session?.user?.email ?? null);
+      setFullName((session?.user?.user_metadata?.full_name as string | undefined) ?? null);
+    });
+
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function handleSignOut() {
+    const supabase = getSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+    <div className="min-h-screen bg-zinc-50">
+      <Sidebar />
+
+      <main className="ml-64 min-h-screen">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-10 py-5">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+              Welcome to Talkshow 👋
+            </h1>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              Your live presentation assistant is ready to get started.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 transition hover:bg-zinc-50">
+              🔔
+            </button>
+
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white transition hover:bg-zinc-800"
+              >
+                {getInitials(fullName, email)}
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 top-12 z-10 w-56 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
+                  <p className="truncate px-3 py-2 text-sm text-zinc-500">{email ?? "Not signed in"}</p>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <div className="px-10 py-8">
+          {/* Overview */}
+          <section>
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold text-zinc-900">
+                Overview
+              </h2>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Your Talkshow workspace is currently empty.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {/* Talk Shows */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm text-zinc-500">Talk Shows</p>
+
+                    <p className="mt-2 text-3xl font-semibold text-zinc-900">
+                      0
+                    </p>
+                  </div>
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
+                    🎙
+                  </div>
+                </div>
+
+                <p className="mt-4 text-xs text-zinc-400">
+                  No talk shows created yet
+                </p>
+              </div>
+
+              {/* Content */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm text-zinc-500">
+                      Content Sources
+                    </p>
+
+                    <p className="mt-2 text-3xl font-semibold text-zinc-900">
+                      0
+                    </p>
+                  </div>
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
+                    📚
+                  </div>
+                </div>
+
+                <p className="mt-4 text-xs text-zinc-400">
+                  No content added yet
+                </p>
+              </div>
+
+              {/* Sessions */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm text-zinc-500">
+                      Live Sessions
+                    </p>
+
+                    <p className="mt-2 text-3xl font-semibold text-zinc-900">
+                      0
+                    </p>
+                  </div>
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
+                    ◷
+                  </div>
+                </div>
+
+                <p className="mt-4 text-xs text-zinc-400">
+                  No sessions completed yet
+                </p>
+              </div>
+
+              {/* Status */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm text-zinc-500">
+                      System Status
+                    </p>
+
+                    <p className="mt-2 text-xl font-semibold text-zinc-900">
+                      Ready
+                    </p>
+                  </div>
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
+                    ✓
+                  </div>
+                </div>
+
+                <p className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
+                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                  System is ready
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Get Started */}
+          <section className="mt-8">
+            <div className="rounded-3xl bg-zinc-900 p-8 text-white">
+              <div className="flex flex-col justify-between gap-8 md:flex-row md:items-center">
+                <div className="max-w-2xl">
+                  <p className="text-xs font-medium uppercase tracking-widest text-zinc-400">
+                    Get Started
+                  </p>
+
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+                    Create your first talk show
+                  </h2>
+
+                  <p className="mt-3 text-sm leading-6 text-zinc-400">
+                    Create a talk show, add your content sources, and
+                    prepare Talkshow to detect relevant information during
+                    your live sessions.
+                  </p>
+                </div>
+
+                <Link
+                  href="/talk-shows"
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200"
+                >
+                  Create Talk Show →
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* Empty Talk Shows */}
+          <section className="mt-10">
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold text-zinc-900">
+                Your Talk Shows
+              </h2>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Your created talk shows will appear here.
+              </p>
+            </div>
+
+            <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white px-6 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-2xl">
+                🎙
+              </div>
+
+              <h3 className="mt-4 text-base font-semibold text-zinc-900">
+                No talk shows yet
+              </h3>
+
+              <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
+                Create your first talk show to start organizing your
+                content and preparing for live sessions.
+              </p>
+
+              <Link
+                href="/talk-shows"
+                className="mt-5 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800"
+              >
+                Create Talk Show
+              </Link>
+            </div>
+          </section>
+
+          {/* Empty Activity */}
+          <section className="mt-10 pb-10">
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold text-zinc-900">
+                Recent Activity
+              </h2>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Your recent activity will appear here.
+              </p>
+            </div>
+
+            <div className="flex min-h-32 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-6">
+              <p className="text-sm text-zinc-400">
+                No activity yet.
+              </p>
+            </div>
+          </section>
         </div>
       </main>
     </div>
