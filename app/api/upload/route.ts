@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-
-// Matches the fallback repo_id /api/match reads from — see that file's comment.
-const DEFAULT_REPO_ID = "00000000-0000-0000-0000-000000000001";
 
 const STORAGE_BUCKET = "repo-documents";
 
@@ -29,10 +27,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing N8N_INGEST_WEBHOOK_URL" }, { status: 500 });
   }
 
+  const authClient = await getSupabaseServerAuthClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   const formData = await request.formData();
   const files = formData.getAll("files").filter((f): f is File => f instanceof File);
-  const repoIdField = formData.get("repo_id");
-  const repoId = typeof repoIdField === "string" && repoIdField ? repoIdField : DEFAULT_REPO_ID;
+  const repoId = user.id;
 
   if (files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -64,7 +70,7 @@ export async function POST(request: Request) {
 
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const storagePath = `${documentId}/${file.name}`;
+      const storagePath = `${user.id}/${documentId}/${file.name}`;
 
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)

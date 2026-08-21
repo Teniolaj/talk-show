@@ -6,6 +6,7 @@ export type TalkShow = {
   description: string;
   category: string;
   createdAt: string;
+  documentIds?: string[];
 };
 
 // Talk shows live in auth.users.user_metadata rather than a dedicated table —
@@ -50,4 +51,25 @@ export async function addTalkShow(
   if (error) throw error;
 
   return newTalkShow;
+}
+
+export async function updateTalkShowDocuments(
+  id: string,
+  documentIds: string[]
+): Promise<TalkShow> {
+  const existingTalkShows = await getTalkShows();
+  const updatedTalkShows = existingTalkShows.map((show) =>
+    show.id === id ? { ...show, documentIds } : show
+  );
+  const updatedTalkShow = updatedTalkShows.find((show) => show.id === id);
+
+  if (!updatedTalkShow) throw new Error("Talk show not found");
+
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase.auth.updateUser({
+    data: { talkShows: updatedTalkShows },
+  });
+  if (error) throw error;
+
+  return updatedTalkShow;
 }

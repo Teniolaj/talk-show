@@ -30,6 +30,16 @@ function broadcastDisplay(message) {
   }
 }
 
+function clearDisplay() {
+  latestDisplay = null;
+
+  for (const client of displayClients) {
+    if (client.readyState === 1) {
+      client.send(JSON.stringify({ type: 'clear' }));
+    }
+  }
+}
+
 wss.on('connection', (clientSocket, request) => {
   const url = new URL(
     request.url,
@@ -142,6 +152,11 @@ if (clientType === 'display') {
   clientSocket.on('message', (audioChunk) => {
     try {
       const message = JSON.parse(audioChunk.toString());
+
+      if (message.type === 'clear-display') {
+        clearDisplay();
+        return;
+      }
 
       if (message.type === 'display' && typeof message.content === 'string') {
         broadcastDisplay({

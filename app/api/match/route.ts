@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 import { embedText } from "@/lib/gemini-embed";
-
-// Fallback for callers that don't pass repo_id (e.g. early testing) — see
-// AGENTS.md / build doc. Each talk show now supplies its own repo_id
-// (talkShow.id from /talk-shows), so matching is scoped per show.
-const DEFAULT_REPO_ID = "00000000-0000-0000-0000-000000000001";
 
 // Tuned from live testing: gemini-embedding-001 at 1536 dims puts genuinely
 // relevant chunks around 0.6-0.77 cosine similarity and off-topic ones around
@@ -59,13 +55,40 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 export async function POST(request: Request) {
-  const { transcript, repo_id } = (await request.json()) as {
+  const { transcript, talkShowId } = (await request.json()) as {
     transcript?: string;
-    repo_id?: string;
+    talkShowId?: string;
   };
-  const repoId = repo_id || DEFAULT_REPO_ID;
 
   if (!transcript || !transcript.trim()) {
+    return NextResponse.json({ tier: null, content: null } satisfies MatchResult);
+  }
+
+  if (!talkShowId) {
+    return NextResponse.json({ error: "talkShowId is required" }, { status: 400 });
+  }
+
+  const authClient = await getSupabaseServerAuthClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  const talkShows = (user.user_metadata?.talkShows ?? []) as Array<{
+    id: string;
+    documentIds?: string[];
+  }>;
+  const talkShow = talkShows.find((show) => show.id === talkShowId);
+
+  if (!talkShow) {
+    return NextResponse.json({ error: "Talk show not found" }, { status: 404 });
+  }
+
+  const documentIds = talkShow.documentIds ?? [];
+  if (documentIds.length === 0) {
     return NextResponse.json({ tier: null, content: null } satisfies MatchResult);
   }
 
@@ -77,7 +100,8 @@ export async function POST(request: Request) {
     const { data: keywordHits } = await supabase
       .from("repo_chunks")
       .select("id, content, topic_tags")
-      .eq("repo_id", repoId)
+      .eq("repo_id", user.id)
+      .in("document_id", documentIds)
       .overlaps("topic_tags", words);
 
     if (keywordHits && keywordHits.length > 0) {
@@ -99,7 +123,8 @@ export async function POST(request: Request) {
   const { data: chunks } = await supabase
     .from("repo_chunks")
     .select("id, content, topic_tags, embedding")
-    .eq("repo_id", repoId);
+    .eq("repo_id", user.id)
+    .in("document_id", documentIds);
 
   let best: { content: string; similarity: number } | null = null;
   for (const chunk of (chunks ?? []) as Chunk[]) {
