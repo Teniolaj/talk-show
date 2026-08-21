@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 import { embedText } from "@/lib/gemini-embed";
 
 // Fallback for callers that don't pass repo_id (e.g. early testing) — see
@@ -67,6 +68,15 @@ export async function POST(request: Request) {
 
   if (!transcript || !transcript.trim()) {
     return NextResponse.json({ tier: null, content: null } satisfies MatchResult);
+  }
+
+  const authClient = await getSupabaseServerAuthClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
   const supabase = getSupabaseServerClient();

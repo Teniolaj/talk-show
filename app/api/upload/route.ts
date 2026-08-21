@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,15 @@ export async function POST(request: Request) {
   const webhookUrl = process.env.N8N_INGEST_WEBHOOK_URL;
   if (!webhookUrl) {
     return NextResponse.json({ error: "Missing N8N_INGEST_WEBHOOK_URL" }, { status: 500 });
+  }
+
+  const authClient = await getSupabaseServerAuthClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
   const formData = await request.formData();

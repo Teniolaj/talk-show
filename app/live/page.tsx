@@ -117,6 +117,14 @@ function LiveSession() {
     }
   }
 
+  function clearDisplayedContent() {
+    setMatch(null);
+
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "clear-display" }));
+    }
+  }
+
   async function start() {
     if (isLive || isStarting) return;
 
@@ -258,6 +266,7 @@ function LiveSession() {
       ?.getTracks()
       .forEach((track) => track.stop());
 
+    clearDisplayedContent();
     socketRef.current?.close();
 
     setStatus("Session stopped");
@@ -450,12 +459,22 @@ function LiveSession() {
                   </div>
                 ) : match?.content ? (
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
                       <span className="h-2 w-2 rounded-full bg-green-500" />
 
                       <span className="text-sm font-semibold text-green-700">
                         Relevant information detected
                       </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={clearDisplayedContent}
+                        className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+                      >
+                        Clear display
+                      </button>
                     </div>
 
                     <div className="mt-5 rounded-2xl bg-zinc-50 p-5">

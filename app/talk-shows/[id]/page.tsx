@@ -327,7 +327,7 @@ export default function TalkShowDetails() {
                   </h2>
 
                   <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">
-                    Once you've added content, you can start a live
+                    Once you&apos;ve added content, you can start a live
                     session and let Talkshow assist with relevant
                     information.
                   </p>

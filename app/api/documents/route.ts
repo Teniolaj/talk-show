@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const repoId = new URL(request.url).searchParams.get("repo_id");
   if (!repoId) {
     return NextResponse.json({ error: "repo_id is required" }, { status: 400 });
+  }
+
+  const authClient = await getSupabaseServerAuthClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
   const supabase = getSupabaseServerClient();
