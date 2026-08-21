@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const repoId = new URL(request.url).searchParams.get("repo_id");
+  if (!repoId) {
+    return NextResponse.json({ error: "repo_id is required" }, { status: 400 });
+  }
+
   const authClient = await getSupabaseServerAuthClient();
   const {
     data: { user },
@@ -16,7 +21,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("repo_documents")
     .select("id, file_name, status, created_at")
-    .eq("repo_id", user.id)
+    .eq("repo_id", repoId)
     .order("created_at", { ascending: false });
 
   if (error) {

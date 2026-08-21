@@ -5,7 +5,31 @@ import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+// Matches the fallback repo_id /api/match reads from — see that file's comment.
+const DEFAULT_REPO_ID = "00000000-0000-0000-0000-000000000001";
+
 const STORAGE_BUCKET = "repo-documents";
+
+// Browsers don't always report a File's MIME type reliably (empty or generic
+// application/octet-stream), which then becomes the Content-Type Supabase
+// Storage serves the file with. Some downstream file-type validators (e.g.
+// the n8n workflow's document extraction node) check that header, not just
+// the URL's extension — so derive it from the extension ourselves rather
+// than trusting file.type.
+const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+function resolveContentType(filename: string, fallback: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return (ext && MIME_TYPES_BY_EXTENSION[ext]) || fallback || "application/octet-stream";
+}
 
 type FileResult = {
   filename: string;
@@ -38,7 +62,8 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const files = formData.getAll("files").filter((f): f is File => f instanceof File);
-  const repoId = user.id;
+  const repoIdField = formData.get("repo_id");
+  const repoId = typeof repoIdField === "string" && repoIdField ? repoIdField : DEFAULT_REPO_ID;
 
   if (files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -70,12 +95,12 @@ export async function POST(request: Request) {
 
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const storagePath = `${user.id}/${documentId}/${file.name}`;
+      const storagePath = `${documentId}/${file.name}`;
 
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(storagePath, buffer, {
-          contentType: file.type || "application/octet-stream",
+          contentType: resolveContentType(file.name, file.type),
           upsert: false,
         });
       if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);

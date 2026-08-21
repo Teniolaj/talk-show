@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type FileResult = {
   filename: string;
@@ -18,6 +19,8 @@ export default function UploadPage() {
 }
 
 function UploadForm() {
+  const searchParams = useSearchParams();
+  const repoId = searchParams.get("repo_id");
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<FileResult[] | null>(null);
@@ -27,14 +30,6 @@ function UploadForm() {
   async function handleUpload() {
     if (files.length === 0) return;
 
-    const nonPdf = files.filter((f) => !f.name.toLowerCase().endsWith(".pdf"));
-    if (nonPdf.length > 0) {
-      setError(
-        `Only PDF is supported right now. Remove: ${nonPdf.map((f) => f.name).join(", ")}`
-      );
-      return;
-    }
-
     setUploading(true);
     setError(null);
     setResults(null);
@@ -42,6 +37,7 @@ function UploadForm() {
     try {
       const formData = new FormData();
       files.forEach((f) => formData.append("files", f));
+      if (repoId) formData.append("repo_id", repoId);
 
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
@@ -64,30 +60,58 @@ function UploadForm() {
     <div className="mx-auto max-w-2xl px-5 py-16">
       <h1 className="text-xl font-semibold">Talkshow — Upload Source Material</h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Upload PDF files for this presentation. Each file is sent to the ingestion workflow to be
+        Upload the files for this presentation. Each file is sent to the ingestion workflow to be
         chunked and embedded, then becomes matchable from the{" "}
         <a href="/live" className="underline">
           live
         </a>{" "}
-        page. Other formats aren&apos;t supported yet.
+        page.
       </p>
 
-      <div className="mt-6 flex flex-col gap-3">
+      <div className="mt-6">
         <input
           ref={inputRef}
           type="file"
           multiple
-          accept=".pdf"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          className="text-sm"
+          className="hidden"
         />
-        <button
-          onClick={handleUpload}
-          disabled={files.length === 0 || uploading}
-          className="w-fit rounded-md bg-zinc-900 px-5 py-2.5 text-sm text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          {uploading ? "Uploading & embedding…" : `Upload ${files.length || ""} file${files.length === 1 ? "" : "s"}`}
-        </button>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            onClick={() => inputRef.current?.click()}
+            className="w-fit rounded-md border border-zinc-200 px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Choose files
+          </button>
+          <button
+            onClick={handleUpload}
+            disabled={files.length === 0 || uploading}
+            className="w-fit rounded-md bg-zinc-900 px-5 py-2.5 text-sm text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            {uploading ? "Uploading & embedding…" : `Upload ${files.length || ""} file${files.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+
+        {files.length > 0 && (
+          <ul className="mt-4 space-y-1.5">
+            {files.map((f, i) => (
+              <li
+                key={`${f.name}-${i}`}
+                className="flex items-center justify-between rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                <span className="truncate">{f.name}</span>
+                <button
+                  onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="ml-3 shrink-0 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                  aria-label={`Remove ${f.name}`}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
