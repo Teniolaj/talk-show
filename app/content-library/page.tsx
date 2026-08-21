@@ -61,7 +61,16 @@ export default function ContentLibrary() {
         throw new Error(result.error || "Upload failed");
       }
 
-      console.log("Upload result:", result);
+      const failed = (result.results ?? []).filter(
+        (fileResult: { error?: string }) => fileResult.error
+      );
+      if (failed.length > 0) {
+        throw new Error(
+          failed
+            .map((fileResult: { filename: string; error?: string }) => `${fileResult.filename}: ${fileResult.error}`)
+            .join("; ")
+        );
+      }
 
       setSelectedFile(null);
       setShowAddContent(false);
