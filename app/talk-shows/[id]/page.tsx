@@ -49,14 +49,6 @@ export default function TalkShowDetails() {
   async function handleUpload() {
     if (!talkShow || files.length === 0) return;
 
-    const nonPdf = files.filter((f) => !f.name.toLowerCase().endsWith(".pdf"));
-    if (nonPdf.length > 0) {
-      setUploadError(
-        `Only PDF is supported right now. Remove: ${nonPdf.map((f) => f.name).join(", ")}`
-      );
-      return;
-    }
-
     setUploading(true);
     setUploadError(null);
 
@@ -225,18 +217,22 @@ export default function TalkShowDetails() {
 
             {showUploader && (
               <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-6">
-                <p className="text-sm text-zinc-500">
-                  PDF only, for now — the ingestion workflow doesn&apos;t handle other formats yet.
-                </p>
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <input
-                    ref={inputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf"
-                    onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                    className="text-sm"
-                  />
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                  className="hidden"
+                />
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    className="w-fit rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
+                  >
+                    Choose files
+                  </button>
                   <button
                     type="button"
                     onClick={handleUpload}
@@ -246,6 +242,28 @@ export default function TalkShowDetails() {
                     {uploading ? "Uploading…" : `Upload ${files.length || ""} file${files.length === 1 ? "" : "s"}`}
                   </button>
                 </div>
+
+                {files.length > 0 && (
+                  <ul className="mt-4 space-y-1.5">
+                    {files.map((f, i) => (
+                      <li
+                        key={`${f.name}-${i}`}
+                        className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-900"
+                      >
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="ml-3 shrink-0 text-zinc-400 hover:text-zinc-900"
+                          aria-label={`Remove ${f.name}`}
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
                 {uploadError && <p className="mt-3 text-sm text-red-500">{uploadError}</p>}
               </div>
             )}
