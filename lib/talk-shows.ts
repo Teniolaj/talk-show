@@ -22,9 +22,9 @@ export type TalkShow = {
 export async function getTalkShows(): Promise<TalkShow[]> {
   const supabase = getSupabaseBrowserClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return (user?.user_metadata?.talkShows as TalkShow[] | undefined) ?? [];
+    data: { session },
+  } = await supabase.auth.getSession();
+  return (session?.user.user_metadata?.talkShows as TalkShow[] | undefined) ?? [];
 }
 
 export async function getTalkShow(id: string): Promise<TalkShow | null> {
@@ -72,4 +72,19 @@ export async function updateTalkShowDocuments(
   if (error) throw error;
 
   return updatedTalkShow;
+}
+
+export async function deleteTalkShow(id: string): Promise<void> {
+  const existingTalkShows = await getTalkShows();
+  const remainingTalkShows = existingTalkShows.filter((show) => show.id !== id);
+
+  if (remainingTalkShows.length === existingTalkShows.length) {
+    throw new Error("Talk show not found");
+  }
+
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase.auth.updateUser({
+    data: { talkShows: remainingTalkShows },
+  });
+  if (error) throw error;
 }

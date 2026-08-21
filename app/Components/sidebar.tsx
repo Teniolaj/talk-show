@@ -14,9 +14,9 @@ export default function Sidebar() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null);
-      setFullName((data.user?.user_metadata?.full_name as string | undefined) ?? null);
+    supabase.auth.getSession().then(({ data }) => {
+      setEmail(data.session?.user.email ?? null);
+      setFullName((data.session?.user.user_metadata?.full_name as string | undefined) ?? null);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {

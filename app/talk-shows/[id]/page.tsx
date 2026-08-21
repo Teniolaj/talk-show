@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../../Components/sidebar";
 import {
   getTalkShow,
+  deleteTalkShow,
   updateTalkShowDocuments,
   type TalkShow,
 } from "@/lib/talk-shows";
@@ -28,6 +29,7 @@ export default function TalkShowDetails() {
   const [documents, setDocuments] = useState<RepoDocument[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [savingSelection, setSavingSelection] = useState(false);
+  const [deletingTalkShow, setDeletingTalkShow] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -125,6 +127,23 @@ export default function TalkShowDetails() {
     );
   }
 
+  async function handleDeleteTalkShow() {
+    if (!talkShow) return;
+    if (!window.confirm(`Delete “${talkShow.name}”? Your library PDFs will not be deleted.`)) {
+      return;
+    }
+
+    setDeletingTalkShow(true);
+    try {
+      await deleteTalkShow(talkShow.id);
+      router.push("/talk-shows");
+      router.refresh();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not delete talk show.");
+      setDeletingTalkShow(false);
+    }
+  }
+
   if (!talkShow) {
     if (!talkShowLoaded) return null;
 
@@ -181,13 +200,23 @@ export default function TalkShowDetails() {
               </p>
             </div>
 
-            <button
-  type="button"
-  onClick={() => router.push(`/live?talkShowId=${talkShow.id}`)}
-  className="rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-zinc-800"
->
-  Start Live Session →
-</button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleDeleteTalkShow}
+                disabled={deletingTalkShow}
+                className="rounded-xl px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                {deletingTalkShow ? "Deleting…" : "Delete talk show"}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/live?talkShowId=${talkShow.id}`)}
+                className="rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-zinc-800"
+              >
+                Start Live Session →
+              </button>
+            </div>
           </div>
         </header>
 

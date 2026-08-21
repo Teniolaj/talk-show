@@ -16,6 +16,7 @@ export default function ContentLibrary() {
   const [uploading, setUploading] = useState(false);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadDocuments() {
@@ -85,6 +86,38 @@ export default function ContentLibrary() {
       );
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleDeleteDocument(document: Document) {
+    const confirmed = window.confirm(
+      `Delete “${document.file_name}”? It will be removed from your library and from every talk show that uses it.`
+    );
+    if (!confirmed) return;
+
+    setDeletingDocumentId(document.id);
+    try {
+      const response = await fetch("/api/documents", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: document.id }),
+      });
+      const responseText = await response.text();
+      let result: { error?: string } | null = null;
+      try {
+        result = responseText ? (JSON.parse(responseText) as { error?: string }) : null;
+      } catch {
+        // The status below still gives a useful message if a proxy returns HTML.
+      }
+      if (!response.ok) {
+        throw new Error(result?.error || `Could not delete document (status ${response.status})`);
+      }
+
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not delete document.");
+    } finally {
+      setDeletingDocumentId(null);
     }
   }
 
@@ -190,6 +223,15 @@ export default function ContentLibrary() {
                         document.created_at
                       ).toLocaleDateString()}
                     </p>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDocument(document)}
+                      disabled={deletingDocumentId === document.id}
+                      className="mt-5 text-sm font-medium text-red-600 transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingDocumentId === document.id ? "Deleting…" : "Delete file"}
+                    </button>
                   </div>
                 ))}
               </div>
