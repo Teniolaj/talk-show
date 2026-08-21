@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { embedText } from "@/lib/gemini-embed";
 
 // Hardcoded for today's demo loop — see AGENTS.md / build doc for why.
+// Matching runs across every document_id under this repo_id, so uploading
+// more files via /upload broadens what a presenter can match against.
 const REPO_ID = "00000000-0000-0000-0000-000000000001";
-const DOCUMENT_ID = "1fc77b63-9dba-4e8d-9494-9ac6341ae655";
 
 // Tuned from live testing: gemini-embedding-001 at 1536 dims puts genuinely
 // relevant chunks around 0.6-0.77 cosine similarity and off-topic ones around
 // 0.43-0.46 for this corpus — 0.75 (the naive starting guess) was too strict
 // and rejected real matches.
 const SEMANTIC_THRESHOLD = 0.6;
-const EMBED_DIMENSIONS = 1536;
 
 type Chunk = {
   id: string;
@@ -57,33 +58,6 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-async function embedTranscript(transcript: string): Promise<number[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
-
-  const res = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        content: { parts: [{ text: transcript }] },
-        outputDimensionality: EMBED_DIMENSIONS,
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error(`Gemini embedding request failed: ${res.status} ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  return data.embedding.values as number[];
-}
-
 export async function POST(request: Request) {
   const { transcript } = (await request.json()) as { transcript?: string };
 
@@ -100,7 +74,6 @@ export async function POST(request: Request) {
       .from("repo_chunks")
       .select("id, content, topic_tags")
       .eq("repo_id", REPO_ID)
-      .eq("document_id", DOCUMENT_ID)
       .overlaps("topic_tags", words);
 
     if (keywordHits && keywordHits.length > 0) {
@@ -117,13 +90,12 @@ export async function POST(request: Request) {
   }
 
   // Semantic tier: embed and compare against stored chunk embeddings.
-  const queryEmbedding = await embedTranscript(transcript);
+  const queryEmbedding = await embedText(transcript);
 
   const { data: chunks } = await supabase
     .from("repo_chunks")
     .select("id, content, topic_tags, embedding")
-    .eq("repo_id", REPO_ID)
-    .eq("document_id", DOCUMENT_ID);
+    .eq("repo_id", REPO_ID);
 
   let best: { content: string; similarity: number } | null = null;
   for (const chunk of (chunks ?? []) as Chunk[]) {

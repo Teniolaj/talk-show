@@ -109,6 +109,12 @@ export default function LivePage() {
       <p className={`mt-2 text-sm ${isLive ? "font-semibold text-green-600" : "text-zinc-500"}`}>
         {status}
       </p>
+      <p className="mt-1 text-sm text-zinc-500">
+        <a href="/upload" className="underline">
+          Upload source material
+        </a>{" "}
+        before going live.
+      </p>
 
       <div className="mt-5 flex gap-2">
         <button
