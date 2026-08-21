@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../../Components/sidebar";
+import { addTalkShow } from "@/lib/talk-shows";
 
 export default function CreateTalkShow() {
   const router = useRouter();
@@ -13,7 +14,7 @@ export default function CreateTalkShow() {
   const [category, setCategory] = useState("");
   const [creating, setCreating] = useState(false);
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!name.trim() || !description.trim() || !category) {
       alert("Please fill in all the required fields.");
       return;
@@ -21,24 +22,17 @@ export default function CreateTalkShow() {
 
     setCreating(true);
 
-    const newTalkShow = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      description: description.trim(),
-      category,
-      createdAt: new Date().toISOString(),
-    };
-
-    const existingTalkShows = JSON.parse(
-      localStorage.getItem("talkShows") || "[]"
-    );
-
-    localStorage.setItem(
-      "talkShows",
-      JSON.stringify([...existingTalkShows, newTalkShow])
-    );
-
-    router.push("/talk-shows");
+    try {
+      await addTalkShow({
+        name: name.trim(),
+        description: description.trim(),
+        category,
+      });
+      router.push("/talk-shows");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to create talk show.");
+      setCreating(false);
+    }
   }
 
   return (

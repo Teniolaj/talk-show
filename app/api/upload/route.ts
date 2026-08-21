@@ -4,8 +4,8 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 
-// Matches the fixed repo_id /api/match reads from — see that file's comment.
-const REPO_ID = "00000000-0000-0000-0000-000000000001";
+// Matches the fallback repo_id /api/match reads from — see that file's comment.
+const DEFAULT_REPO_ID = "00000000-0000-0000-0000-000000000001";
 
 const STORAGE_BUCKET = "repo-documents";
 
@@ -31,6 +31,8 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const files = formData.getAll("files").filter((f): f is File => f instanceof File);
+  const repoIdField = formData.get("repo_id");
+  const repoId = typeof repoIdField === "string" && repoIdField ? repoIdField : DEFAULT_REPO_ID;
 
   if (files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
     // n8n workflow only ever UPDATEs that row's status — it never creates it.
     const { error: docInsertError } = await supabase.from("repo_documents").insert({
       id: documentId,
-      repo_id: REPO_ID,
+      repo_id: repoId,
       file_name: file.name,
       status: "pending",
     });
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_url: publicUrlData.publicUrl,
-          repo_id: REPO_ID,
+          repo_id: repoId,
           document_id: documentId,
         }),
       });

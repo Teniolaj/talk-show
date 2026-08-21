@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Suspense, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type FileResult = {
   filename: string;
@@ -10,6 +11,16 @@ type FileResult = {
 };
 
 export default function UploadPage() {
+  return (
+    <Suspense fallback={null}>
+      <UploadForm />
+    </Suspense>
+  );
+}
+
+function UploadForm() {
+  const searchParams = useSearchParams();
+  const repoId = searchParams.get("repo_id");
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<FileResult[] | null>(null);
@@ -34,6 +45,7 @@ export default function UploadPage() {
     try {
       const formData = new FormData();
       files.forEach((f) => formData.append("files", f));
+      if (repoId) formData.append("repo_id", repoId);
 
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
