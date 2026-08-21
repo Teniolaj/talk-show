@@ -1,20 +1,33 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+The live speak-to-match loop (`/live`) also needs a small standalone relay server (in [relay/](relay/)) that bridges browser mic audio to Deepgram — it runs as a separate process on port 3001.
+
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies for both the app and the relay server:
+
+```bash
+npm install
+cd relay && npm install && cd ..
+```
+
+2. Set up environment variables:
+   - Copy `.env.local.example` to `.env.local` in the project root (Supabase keys) — ask a team member for the values.
+   - Copy `relay/.env.example` to `relay/.env` and add your `DEEPGRAM_API_KEY`.
+
+3. Start the relay server (in its own terminal, leave it running):
+
+```bash
+cd relay && npm start
+```
+
+4. In a second terminal, start the Next.js dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. The live detection loop is at [http://localhost:3000/live](http://localhost:3000/live) and requires the relay server from step 3 to be running.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
