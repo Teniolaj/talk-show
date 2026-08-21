@@ -1,7 +1,52 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import Sidebar from "./Components/sidebar";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getInitials } from "@/lib/user-display";
 
 export default function Home() {
+  const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+      setFullName((data.user?.user_metadata?.full_name as string | undefined) ?? null);
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setEmail(session?.user?.email ?? null);
+      setFullName((session?.user?.user_metadata?.full_name as string | undefined) ?? null);
+    });
+
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function handleSignOut() {
+    const supabase = getSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50">
       <Sidebar />
@@ -24,8 +69,27 @@ export default function Home() {
               🔔
             </button>
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white">
-              G
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white transition hover:bg-zinc-800"
+              >
+                {getInitials(fullName, email)}
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 top-12 z-10 w-56 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
+                  <p className="truncate px-3 py-2 text-sm text-zinc-500">{email ?? "Not signed in"}</p>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>

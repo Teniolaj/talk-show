@@ -29,6 +29,14 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. The live detection loop is at [http://localhost:3000/live](http://localhost:3000/live) and requires the relay server from step 3 to be running.
 
+Before going live, upload source material (PDF only, for now) at [http://localhost:3000/upload](http://localhost:3000/upload). `/live` then matches spoken segments against every uploaded file together.
+
+Ingestion is not done in this app — `/api/upload` uploads the file to the public `repo-documents` Supabase Storage bucket, creates the `repo_documents` row, then calls an n8n webhook (`N8N_INGEST_WEBHOOK_URL` in `.env.local`) with `{ file_url, repo_id, document_id }`. The n8n workflow (exported at [n8n/Talkshow-Repo-Ingestion-1.json](n8n/Talkshow-Repo-Ingestion-1.json) — import it at [n8n.io](https://n8n.io) to view/edit) downloads the file, extracts PDF text, chunks and tags it, embeds each chunk via Gemini, inserts into `repo_chunks`, and flips `repo_documents.status` to `ready`.
+
+Two things to know when working on this locally:
+- The workflow currently only extracts **PDF** text (`Extract PDF Text` node is hardcoded to `operation: pdf`). Other formats will 500 out of the webhook until the workflow is extended.
+- The URL in `.env.local` right now is n8n's **test** webhook (`/webhook-test/...`). It only responds once per click of "Listen for test event" in the n8n editor. For always-on use, activate the workflow in n8n and swap the URL to the production path (`/webhook/...`).
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

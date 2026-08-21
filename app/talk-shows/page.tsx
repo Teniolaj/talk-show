@@ -3,24 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Sidebar from "../Components/sidebar";
-
-type TalkShow = {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  createdAt: string;
-};
+import { getTalkShows, type TalkShow } from "@/lib/talk-shows";
 
 export default function TalkShows() {
   const [talkShows, setTalkShows] = useState<TalkShow[]>([]);
 
   useEffect(() => {
-    const savedTalkShows = JSON.parse(
-      localStorage.getItem("talkShows") || "[]"
-    );
-
-    setTalkShows(savedTalkShows);
+    getTalkShows().then(setTalkShows);
   }, []);
 
   return (

@@ -1,6 +1,39 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getInitials } from "@/lib/user-display";
 
 export default function Sidebar() {
+  const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+      setFullName((data.user?.user_metadata?.full_name as string | undefined) ?? null);
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setEmail(session?.user?.email ?? null);
+      setFullName((session?.user?.user_metadata?.full_name as string | undefined) ?? null);
+    });
+
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  async function handleSignOut() {
+    const supabase = getSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-zinc-200 bg-white">
       {/* Logo */}
@@ -90,12 +123,20 @@ export default function Sidebar() {
 
         <div className="flex items-center gap-3 px-2 py-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-200 text-sm font-semibold text-zinc-700">
-            G
+            {getInitials(fullName, email)}
           </div>
 
-          <div>
-            <p className="text-sm font-medium text-zinc-900">User</p>
-            <p className="text-xs text-zinc-500">Talkshow account</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-zinc-900">
+              {email ?? "Not signed in"}
+            </p>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="text-xs text-zinc-500 hover:text-zinc-900 hover:underline"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </div>

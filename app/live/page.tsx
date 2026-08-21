@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { getTalkShow, type TalkShow } from "@/lib/talk-shows";
 
 function getRelayWebSocketUrl() {
   if (process.env.NEXT_PUBLIC_RELAY_WS_URL) {
@@ -25,15 +26,15 @@ type RelayMessage =
   | { type: "error"; message: string }
   | { type: "transcript"; transcript: string; is_final: boolean };
 
-type TalkShow = {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  createdAt: string;
-};
-
 export default function LivePage() {
+  return (
+    <Suspense fallback={null}>
+      <LiveSession />
+    </Suspense>
+  );
+}
+
+function LiveSession() {
   const searchParams = useSearchParams();
   const talkShowId = searchParams.get("talkShowId");
 
@@ -59,16 +60,7 @@ export default function LivePage() {
 
   useEffect(() => {
     if (!talkShowId) return;
-
-    const savedTalkShows = JSON.parse(
-      localStorage.getItem("talkShows") || "[]"
-    );
-
-    const selectedTalkShow = savedTalkShows.find(
-      (show: TalkShow) => show.id === talkShowId
-    );
-
-    setTalkShow(selectedTalkShow || null);
+    getTalkShow(talkShowId).then(setTalkShow);
   }, [talkShowId]);
 
   useEffect(() => {
@@ -96,6 +88,7 @@ export default function LivePage() {
         },
         body: JSON.stringify({
           transcript: segment,
+          talkShowId,
         }),
       });
 

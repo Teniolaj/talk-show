@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../../Components/sidebar";
+import {
+  getTalkShow,
+  updateTalkShowDocuments,
+  type TalkShow,
+} from "@/lib/talk-shows";
 
-type TalkShow = {
+type RepoDocument = {
   id: string;
-  name: string;
-  description: string;
-  category: string;
-  createdAt: string;
+  file_name: string;
+  status: string;
+  created_at: string;
 };
 
 export default function TalkShowDetails() {
@@ -19,20 +23,111 @@ export default function TalkShowDetails() {
   const router = useRouter();
 
   const [talkShow, setTalkShow] = useState<TalkShow | null>(null);
+  const [talkShowLoaded, setTalkShowLoaded] = useState(false);
+
+  const [documents, setDocuments] = useState<RepoDocument[]>([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [savingSelection, setSavingSelection] = useState(false);
+  const [showUploader, setShowUploader] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const savedTalkShows = JSON.parse(
-      localStorage.getItem("talkShows") || "[]"
-    );
-
-    const selectedTalkShow = savedTalkShows.find(
-      (show: TalkShow) => show.id === id
-    );
-
-    setTalkShow(selectedTalkShow || null);
+    getTalkShow(id).then((show) => {
+      setTalkShow(show);
+      setSelectedDocumentIds(show?.documentIds ?? []);
+      setTalkShowLoaded(true);
+    });
   }, [id]);
 
+  const fetchDocuments = useCallback(async (): Promise<RepoDocument[]> => {
+    const res = await fetch("/api/documents");
+    const data = await res.json();
+    return res.ok ? (data.documents ?? []) : [];
+  }, []);
+
+  useEffect(() => {
+    fetchDocuments().then(setDocuments);
+  }, [fetchDocuments]);
+
+  async function handleUpload() {
+    if (!talkShow || files.length === 0) return;
+
+    const nonPdf = files.filter((f) => !f.name.toLowerCase().endsWith(".pdf"));
+    if (nonPdf.length > 0) {
+      setUploadError(
+        `Only PDF is supported right now. Remove: ${nonPdf.map((f) => f.name).join(", ")}`
+      );
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      files.forEach((f) => formData.append("files", f));
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setUploadError(data.error ?? "Upload failed");
+      } else {
+        const failed = (data.results ?? []).filter((r: { error?: string }) => r.error);
+        if (failed.length > 0) {
+          setUploadError(failed.map((r: { filename: string; error?: string }) => `${r.filename}: ${r.error}`).join("; "));
+        }
+        setSelectedDocumentIds((current) => [
+          ...new Set([
+            ...current,
+            ...(data.results ?? [])
+              .filter((result: { error?: string }) => !result.error)
+              .map((result: { documentId: string }) => result.documentId),
+          ]),
+        ]);
+        setDocuments(await fetchDocuments());
+      }
+    } catch {
+      setUploadError("Upload request failed — check server logs");
+    } finally {
+      setUploading(false);
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function saveDocumentSelection() {
+    if (!talkShow) return;
+
+    setSavingSelection(true);
+    try {
+      const updatedTalkShow = await updateTalkShowDocuments(
+        talkShow.id,
+        selectedDocumentIds
+      );
+      setTalkShow(updatedTalkShow);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Could not save document selection."
+      );
+    } finally {
+      setSavingSelection(false);
+    }
+  }
+
+  function toggleDocument(documentId: string) {
+    setSelectedDocumentIds((current) =>
+      current.includes(documentId)
+        ? current.filter((id) => id !== documentId)
+        : [...current, documentId]
+    );
+  }
+
   if (!talkShow) {
+    if (!talkShowLoaded) return null;
+
     return (
       <div className="min-h-screen bg-zinc-50">
         <Sidebar />
@@ -108,11 +203,13 @@ export default function TalkShowDetails() {
                 <p className="text-sm text-zinc-500">Content Sources</p>
 
                 <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                  0
+                  {selectedDocumentIds.length}
                 </p>
 
                 <p className="mt-2 text-xs text-zinc-400">
-                  No content added yet
+                  {selectedDocumentIds.length === 0
+                    ? "No documents selected"
+                    : `${documents.filter((d) => selectedDocumentIds.includes(d.id) && d.status === "ready").length} ready`}
                 </p>
               </div>
 
@@ -152,39 +249,110 @@ export default function TalkShowDetails() {
                 </h2>
 
                 <p className="mt-1 text-sm text-zinc-500">
-                  Content Talkshow can use during live detection.
+                  Select documents from your private library for this talk show.
                 </p>
               </div>
 
               <button
                 type="button"
+                onClick={() => setShowUploader((v) => !v)}
                 className="rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
               >
-                + Add Content
+                + Add to Library
               </button>
             </div>
 
-            <div className="mt-5 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white px-6 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-2xl">
-                📚
+            {showUploader && (
+              <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-6">
+                <p className="text-sm text-zinc-500">
+                  Upload PDFs to your private library. They will be selected for this talk show after upload.
+                </p>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf"
+                    onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                    className="text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUpload}
+                    disabled={files.length === 0 || uploading}
+                    className="w-fit rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40"
+                  >
+                    {uploading ? "Uploading…" : `Upload ${files.length || ""} file${files.length === 1 ? "" : "s"}`}
+                  </button>
+                </div>
+                {uploadError && <p className="mt-3 text-sm text-red-500">{uploadError}</p>}
               </div>
+            )}
 
-              <h3 className="mt-4 text-base font-semibold text-zinc-900">
-                No content sources yet
-              </h3>
+            {documents.length === 0 ? (
+              <div className="mt-5 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white px-6 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-2xl">
+                  📚
+                </div>
 
-              <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
-                Add documents or other supported content to give your
-                talk show information to work with during live sessions.
-              </p>
+                <h3 className="mt-4 text-base font-semibold text-zinc-900">
+                  No content sources yet
+                </h3>
 
-              <button
-                type="button"
-                className="mt-5 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800"
-              >
-                Add Your First Content
-              </button>
-            </div>
+                <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
+                  Add documents or other supported content to give your
+                  talk show information to work with during live sessions.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUploader(true)}
+                  className="mt-5 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800"
+                >
+                  Add Your First Content
+                </button>
+              </div>
+            ) : (
+              <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50 px-5 py-3">
+                  <p className="text-xs font-medium text-zinc-500">
+                    {selectedDocumentIds.length} selected for this talk show
+                  </p>
+                  <button
+                    type="button"
+                    onClick={saveDocumentSelection}
+                    disabled={savingSelection}
+                    className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {savingSelection ? "Saving…" : "Save selection"}
+                  </button>
+                </div>
+                {documents.map((doc) => (
+                  <label key={doc.id} className="flex cursor-pointer items-center justify-between gap-4 border-t border-zinc-100 px-5 py-4 first:border-t-0 hover:bg-zinc-50">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedDocumentIds.includes(doc.id)}
+                        onChange={() => toggleDocument(doc.id)}
+                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                      />
+                      <span className="truncate text-sm font-medium text-zinc-900">{doc.file_name}</span>
+                    </span>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
+                        doc.status === "ready"
+                          ? "bg-green-100 text-green-700"
+                          : doc.status === "error"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-zinc-100 text-zinc-600"
+                      }`}
+                    >
+                      {doc.status}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Live Session */}
@@ -201,7 +369,7 @@ export default function TalkShowDetails() {
                   </h2>
 
                   <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-400">
-                    Once you've added content, you can start a live
+                    Once you&apos;ve added content, you can start a live
                     session and let Talkshow assist with relevant
                     information.
                   </p>

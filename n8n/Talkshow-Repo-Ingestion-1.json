@@ -1,0 +1,335 @@
+{
+  "name": "Talkshow-Repo-Ingestion-1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "=POST",
+        "path": "ingest-document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "aa68e563-93ef-4cb5-a24d-9770a288794a",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "talkshow-ingest-document"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "cf9f4088-2ef5-4988-85d0-60ad3e6f2d69",
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "db7c6e87-53d2-4123-afca-5c657ddb4a42",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const TOPIC_SYNONYMS = {\n  mission: ['mission', 'our why', 'purpose', 'what we believe'],\n  vision: ['vision', \"where we're going\", 'the future'],\n  team: ['team', 'founders', 'who we are', 'leadership'],\n  product: ['product', 'how it works', 'platform', 'solution'],\n  financials: ['financials', 'revenue', 'the ask', 'funding', 'numbers'],\n  traction: ['traction', 'growth', 'metrics', 'customers'],\n  roadmap: ['roadmap', \"what's next\", 'timeline'],\n  competitors: ['competitors', 'competition', 'market landscape'],\n};\n\nfunction tagForHeading(heading) {\n  const h = (heading || '').toLowerCase();\n  const tags = [];\n  for (const [topic, synonyms] of Object.entries(TOPIC_SYNONYMS)) {\n    if (synonyms.some((s) => h.includes(s))) tags.push(topic);\n  }\n  return tags;\n}\n\n// Strip footer noise (date stamps, bare page numbers) before chunking\nfunction stripNoise(text) {\n  return text\n    .split('\\n')\n    .filter((line) => {\n      const trimmed = line.trim();\n      const isDateStamp = /^\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s*$/.test(trimmed);\n      const isBarePageNumber = /^\\d{1,3}$/.test(trimmed);\n      return !isDateStamp && !isBarePageNumber;\n    })\n    .join('\\n');\n}\n\nconst rawText = stripNoise($input.first().json.text || '');\nconst paragraphs = rawText\n  .split(/\\n{2,}/)\n  .map((p) => p.trim())\n  .filter(Boolean);\n\nconst chunks = [];\nlet current = '';\nlet currentHeading = 'Untitled';\n\nfor (const para of paragraphs) {\n  const looksLikeHeading = para.length < 60 && !para.endsWith('.');\n  if (looksLikeHeading) {\n    if (current.trim()) {\n      chunks.push({ heading: currentHeading, text: current.trim() });\n    }\n    currentHeading = para;\n    current = '';\n  } else {\n    current += (current ? '\\n\\n' : '') + para;\n    if (current.length > 1600) {\n      chunks.push({ heading: currentHeading, text: current.trim() });\n      current = '';\n    }\n  }\n}\nif (current.trim()) {\n  chunks.push({ heading: currentHeading, text: current.trim() });\n}\n\nconst trigger = $('Webhook').first().json.body;\n\nreturn chunks.map((c) => ({\n  json: {\n    repo_id: trigger.repo_id,\n    document_id: trigger.document_id,\n    heading: c.heading,\n    content: c.text,\n    topic_tags: tagForHeading(c.heading),\n  },\n}));"
+      },
+      "id": "459cf45f-bd9a-4e35-b522-17f7ec4e3a42",
+      "name": "Chunk & Tag",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"content\": { \"parts\": [ { \"text\": $json.content } ] }, \"outputDimensionality\": 1536 } }}",
+        "options": {}
+      },
+      "id": "f821826a-36d7-44d4-8dd9-6f8c12527252",
+      "name": "Generate Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "F8Ccu26fajL6kouW",
+          "name": "talk-show-gemini-embeddings"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const embedding = $json.embedding.values;\nconst original = $('Chunk & Tag').item.json;\n\nreturn {\n  json: {\n    repo_id: original.repo_id,\n    document_id: original.document_id,\n    content: original.content,\n    topic_tags: original.topic_tags,\n    embedding: embedding,\n  },\n};"
+      },
+      "id": "582441f5-6cc6-4d92-9bc0-84759b5ddc7d",
+      "name": "Merge Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "repo_chunks",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "repo_id",
+              "fieldValue": "={{ $json.repo_id }}"
+            },
+            {
+              "fieldId": "document_id",
+              "fieldValue": "={{ $json.document_id }}"
+            },
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $json.content }}"
+            },
+            {
+              "fieldId": "topic_tags",
+              "fieldValue": "={{ $json.topic_tags }}"
+            },
+            {
+              "fieldId": "embedding",
+              "fieldValue": "={{ $json.embedding }}"
+            }
+          ]
+        }
+      },
+      "id": "4f4d2ed0-6efb-455d-be12-43458029a755",
+      "name": "Insert Chunk",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "37uEzKJaKayrLHXJ",
+          "name": "talk-show-supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "ed231746-259d-43c8-a650-41a8c1e57437",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1552,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "repo_documents",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').first().json.body.document_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "ready"
+            }
+          ]
+        }
+      },
+      "id": "d14389d4-4818-4660-ba4a-e8081551b79c",
+      "name": "Update Document Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "37uEzKJaKayrLHXJ",
+          "name": "talk-show-supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"document_id\": $('Webhook').first().json.body.document_id, \"chunks_created\": $('Chunk & Tag').all().length } }}",
+        "options": {}
+      },
+      "id": "8060a572-6fc3-4b53-9577-cb49be24f2cb",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1984,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Chunk & Tag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk & Tag": {
+      "main": [
+        [
+          {
+            "node": "Generate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Embedding": {
+      "main": [
+        [
+          {
+            "node": "Insert Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Chunk": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Update Document Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Document Status": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b1016df7-c469-408b-aeb6-c1960f7e3906",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b8fa263f1460c755ef9d0fd79d2d21ace788ba716b97c988685cc5702e13e31a"
+  },
+  "nodeGroups": [],
+  "id": "uHtPemBJdMbv8Xai",
+  "tags": []
+}
