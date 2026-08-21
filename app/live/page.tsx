@@ -88,7 +88,7 @@ function LiveSession() {
         },
         body: JSON.stringify({
           transcript: segment,
-          talkShowId,
+          repo_id: talkShowId,
         }),
       });
 

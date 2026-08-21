@@ -52,7 +52,6 @@ export async function addTalkShow(
 
   return newTalkShow;
 }
-
 export async function updateTalkShowDocuments(
   id: string,
   documentIds: string[]
