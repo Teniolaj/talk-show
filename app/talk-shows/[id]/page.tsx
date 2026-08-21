@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../../Components/sidebar";
-import { getTalkShow, type TalkShow } from "@/lib/talk-shows";
+import {
+  getTalkShow,
+  deleteTalkShow,
+  updateTalkShowDocuments,
+  type TalkShow,
+} from "@/lib/talk-shows";
 
 type RepoDocument = {
   id: string;
@@ -22,6 +27,9 @@ export default function TalkShowDetails() {
   const [talkShowLoaded, setTalkShowLoaded] = useState(false);
 
   const [documents, setDocuments] = useState<RepoDocument[]>([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [savingSelection, setSavingSelection] = useState(false);
+  const [deletingTalkShow, setDeletingTalkShow] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -31,16 +39,16 @@ export default function TalkShowDetails() {
   useEffect(() => {
     getTalkShow(id).then((show) => {
       setTalkShow(show);
+      setSelectedDocumentIds(show?.documentIds ?? []);
       setTalkShowLoaded(true);
     });
   }, [id]);
 
   const fetchDocuments = useCallback(async (): Promise<RepoDocument[]> => {
-    if (!talkShow) return [];
-    const res = await fetch(`/api/documents?repo_id=${talkShow.id}`);
+    const res = await fetch("/api/documents");
     const data = await res.json();
     return res.ok ? (data.documents ?? []) : [];
-  }, [talkShow]);
+  }, []);
 
   useEffect(() => {
     fetchDocuments().then(setDocuments);
@@ -49,13 +57,18 @@ export default function TalkShowDetails() {
   async function handleUpload() {
     if (!talkShow || files.length === 0) return;
 
+    const nonPdf = files.filter((file) => !file.name.toLowerCase().endsWith(".pdf"));
+    if (nonPdf.length > 0) {
+      setUploadError(`Only PDF is supported right now. Remove: ${nonPdf.map((file) => file.name).join(", ")}`);
+      return;
+    }
+
     setUploading(true);
     setUploadError(null);
 
     try {
       const formData = new FormData();
       files.forEach((f) => formData.append("files", f));
-      formData.append("repo_id", talkShow.id);
 
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
@@ -67,6 +80,14 @@ export default function TalkShowDetails() {
         if (failed.length > 0) {
           setUploadError(failed.map((r: { filename: string; error?: string }) => `${r.filename}: ${r.error}`).join("; "));
         }
+        setSelectedDocumentIds((current) => [
+          ...new Set([
+            ...current,
+            ...(data.results ?? [])
+              .filter((result: { error?: string }) => !result.error)
+              .map((result: { documentId: string }) => result.documentId),
+          ]),
+        ]);
         setDocuments(await fetchDocuments());
       }
     } catch {
@@ -75,6 +96,50 @@ export default function TalkShowDetails() {
       setUploading(false);
       setFiles([]);
       if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function saveDocumentSelection() {
+    if (!talkShow) return;
+
+    setSavingSelection(true);
+    try {
+      const updatedTalkShow = await updateTalkShowDocuments(
+        talkShow.id,
+        selectedDocumentIds
+      );
+      setTalkShow(updatedTalkShow);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Could not save document selection."
+      );
+    } finally {
+      setSavingSelection(false);
+    }
+  }
+
+  function toggleDocument(documentId: string) {
+    setSelectedDocumentIds((current) =>
+      current.includes(documentId)
+        ? current.filter((id) => id !== documentId)
+        : [...current, documentId]
+    );
+  }
+
+  async function handleDeleteTalkShow() {
+    if (!talkShow) return;
+    if (!window.confirm(`Delete “${talkShow.name}”? Your library PDFs will not be deleted.`)) {
+      return;
+    }
+
+    setDeletingTalkShow(true);
+    try {
+      await deleteTalkShow(talkShow.id);
+      router.push("/talk-shows");
+      router.refresh();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not delete talk show.");
+      setDeletingTalkShow(false);
     }
   }
 
@@ -134,13 +199,23 @@ export default function TalkShowDetails() {
               </p>
             </div>
 
-            <button
-  type="button"
-  onClick={() => router.push(`/live?talkShowId=${talkShow.id}`)}
-  className="rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-zinc-800"
->
-  Start Live Session →
-</button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleDeleteTalkShow}
+                disabled={deletingTalkShow}
+                className="rounded-xl px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                {deletingTalkShow ? "Deleting…" : "Delete talk show"}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/live?talkShowId=${talkShow.id}`)}
+                className="rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-zinc-800"
+              >
+                Start Live Session →
+              </button>
+            </div>
           </div>
         </header>
 
@@ -156,13 +231,13 @@ export default function TalkShowDetails() {
                 <p className="text-sm text-zinc-500">Content Sources</p>
 
                 <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                  {documents.length}
+                  {selectedDocumentIds.length}
                 </p>
 
                 <p className="mt-2 text-xs text-zinc-400">
-                  {documents.length === 0
-                    ? "No content added yet"
-                    : `${documents.filter((d) => d.status === "ready").length} ready`}
+                  {selectedDocumentIds.length === 0
+                    ? "No documents selected"
+                    : `${documents.filter((document) => selectedDocumentIds.includes(document.id) && document.status === "ready").length} ready`}
                 </p>
               </div>
 
@@ -202,7 +277,7 @@ export default function TalkShowDetails() {
                 </h2>
 
                 <p className="mt-1 text-sm text-zinc-500">
-                  Content Talkshow can use during live detection.
+                  Select documents from your private library for this talk show.
                 </p>
               </div>
 
@@ -211,7 +286,7 @@ export default function TalkShowDetails() {
                 onClick={() => setShowUploader((v) => !v)}
                 className="rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
               >
-                + Add Content
+                + Add to Library
               </button>
             </div>
 
@@ -221,6 +296,7 @@ export default function TalkShowDetails() {
                   ref={inputRef}
                   type="file"
                   multiple
+                  accept=".pdf,application/pdf"
                   onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
                   className="hidden"
                 />
@@ -292,10 +368,31 @@ export default function TalkShowDetails() {
                 </button>
               </div>
             ) : (
-              <div className="mt-5 divide-y divide-zinc-100 rounded-2xl border border-zinc-200 bg-white">
+              <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50 px-5 py-3">
+                  <p className="text-xs font-medium text-zinc-500">
+                    {selectedDocumentIds.length} selected for this talk show
+                  </p>
+                  <button
+                    type="button"
+                    onClick={saveDocumentSelection}
+                    disabled={savingSelection}
+                    className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {savingSelection ? "Saving…" : "Save selection"}
+                  </button>
+                </div>
                 {documents.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between px-5 py-4">
-                    <span className="text-sm font-medium text-zinc-900">{doc.file_name}</span>
+                  <label key={doc.id} className="flex cursor-pointer items-center justify-between gap-4 border-t border-zinc-100 px-5 py-4 first:border-t-0 hover:bg-zinc-50">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedDocumentIds.includes(doc.id)}
+                        onChange={() => toggleDocument(doc.id)}
+                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                      />
+                      <span className="truncate text-sm font-medium text-zinc-900">{doc.file_name}</span>
+                    </span>
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
                         doc.status === "ready"
@@ -307,7 +404,7 @@ export default function TalkShowDetails() {
                     >
                       {doc.status}
                     </span>
-                  </div>
+                  </label>
                 ))}
               </div>
             )}

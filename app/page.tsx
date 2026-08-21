@@ -6,20 +6,28 @@ import { useEffect, useRef, useState } from "react";
 import Sidebar from "./Components/sidebar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/user-display";
+import { getTalkShows, type TalkShow } from "@/lib/talk-shows";
+
+type LibraryDocument = {
+  id: string;
+  status: string;
+};
 
 export default function Home() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [talkShows, setTalkShows] = useState<TalkShow[]>([]);
+  const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null);
-      setFullName((data.user?.user_metadata?.full_name as string | undefined) ?? null);
+    supabase.auth.getSession().then(({ data }) => {
+      setEmail(data.session?.user.email ?? null);
+      setFullName((data.session?.user.user_metadata?.full_name as string | undefined) ?? null);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -29,6 +37,27 @@ export default function Home() {
 
     return () => subscription.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    async function loadWorkspace() {
+      const [shows, documentsResponse] = await Promise.all([
+        getTalkShows(),
+        fetch("/api/documents"),
+      ]);
+
+      setTalkShows(shows);
+      if (documentsResponse.ok) {
+        const data = await documentsResponse.json();
+        setDocuments(data.documents ?? []);
+      }
+    }
+
+    loadWorkspace().catch((error) =>
+      console.error("Failed to load dashboard workspace", error)
+    );
+  }, []);
+
+  const readyDocuments = documents.filter((document) => document.status === "ready").length;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -103,7 +132,9 @@ export default function Home() {
               </h2>
 
               <p className="mt-1 text-sm text-zinc-500">
-                Your Talkshow workspace is currently empty.
+                {talkShows.length === 0
+                  ? "Create a talk show and add PDFs to get started."
+                  : `${talkShows.length} talk show${talkShows.length === 1 ? "" : "s"} and ${documents.length} document${documents.length === 1 ? "" : "s"} in your workspace.`}
               </p>
             </div>
 
@@ -115,7 +146,7 @@ export default function Home() {
                     <p className="text-sm text-zinc-500">Talk Shows</p>
 
                     <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                      0
+                      {talkShows.length}
                     </p>
                   </div>
 
@@ -125,7 +156,9 @@ export default function Home() {
                 </div>
 
                 <p className="mt-4 text-xs text-zinc-400">
-                  No talk shows created yet
+                  {talkShows.length === 0
+                    ? "No talk shows created yet"
+                    : `${talkShows.length} created`}
                 </p>
               </div>
 
@@ -138,7 +171,7 @@ export default function Home() {
                     </p>
 
                     <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                      0
+                      {documents.length}
                     </p>
                   </div>
 
@@ -148,7 +181,9 @@ export default function Home() {
                 </div>
 
                 <p className="mt-4 text-xs text-zinc-400">
-                  No content added yet
+                  {documents.length === 0
+                    ? "No files in your library"
+                    : `${documents.length} private file${documents.length === 1 ? "" : "s"}`}
                 </p>
               </div>
 
@@ -157,11 +192,11 @@ export default function Home() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-sm text-zinc-500">
-                      Live Sessions
+                      Ready Files
                     </p>
 
                     <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                      0
+                      {readyDocuments}
                     </p>
                   </div>
 
@@ -171,7 +206,9 @@ export default function Home() {
                 </div>
 
                 <p className="mt-4 text-xs text-zinc-400">
-                  No sessions completed yet
+                  {readyDocuments === 0
+                    ? "Waiting for uploads"
+                    : "Ready to use in a talk show"}
                 </p>
               </div>
 
@@ -211,13 +248,12 @@ export default function Home() {
                   </p>
 
                   <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-                    Create your first talk show
+                    {talkShows.length === 0 ? "Create your first talk show" : "Continue building your workspace"}
                   </h2>
 
                   <p className="mt-3 text-sm leading-6 text-zinc-400">
-                    Create a talk show, add your content sources, and
-                    prepare Talkshow to detect relevant information during
-                    your live sessions.
+                    Add PDFs to your private library, select the right ones for each
+                    talk show, and prepare for live sessions.
                   </p>
                 </div>
 
@@ -225,7 +261,7 @@ export default function Home() {
                   href="/talk-shows"
                   className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200"
                 >
-                  Create Talk Show →
+                  {talkShows.length === 0 ? "Create Talk Show →" : "Manage Talk Shows →"}
                 </Link>
               </div>
             </div>
@@ -243,6 +279,7 @@ export default function Home() {
               </p>
             </div>
 
+            {talkShows.length === 0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white px-6 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-2xl">
                 🎙
@@ -264,6 +301,28 @@ export default function Home() {
                 Create Talk Show
               </Link>
             </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {talkShows.slice(0, 3).map((talkShow) => (
+                  <Link
+                    key={talkShow.id}
+                    href={`/talk-shows/${talkShow.id}`}
+                    className="rounded-2xl border border-zinc-200 bg-white p-5 transition hover:border-zinc-300 hover:shadow-sm"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-lg">🎙</span>
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium capitalize text-zinc-600">
+                        {talkShow.category}
+                      </span>
+                    </div>
+                    <h3 className="mt-4 font-semibold text-zinc-900">{talkShow.name}</h3>
+                    <p className="mt-2 text-sm text-zinc-500">
+                      {talkShow.documentIds?.length ?? 0} selected document{(talkShow.documentIds?.length ?? 0) === 1 ? "" : "s"}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Empty Activity */}

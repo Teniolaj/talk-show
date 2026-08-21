@@ -14,9 +14,9 @@ export default function Sidebar() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null);
-      setFullName((data.user?.user_metadata?.full_name as string | undefined) ?? null);
+    supabase.auth.getSession().then(({ data }) => {
+      setEmail(data.session?.user.email ?? null);
+      setFullName((data.session?.user.user_metadata?.full_name as string | undefined) ?? null);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -73,7 +73,7 @@ export default function Sidebar() {
           </Link>
 
           <Link
-            href="/content"
+            href="/content-library"
             className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
           >
             <span className="text-base">▣</span>

@@ -3,14 +3,31 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Sidebar from "../Components/sidebar";
-import { getTalkShows, type TalkShow } from "@/lib/talk-shows";
+import { deleteTalkShow, getTalkShows, type TalkShow } from "@/lib/talk-shows";
 
 export default function TalkShows() {
   const [talkShows, setTalkShows] = useState<TalkShow[]>([]);
+  const [deletingTalkShowId, setDeletingTalkShowId] = useState<string | null>(null);
 
   useEffect(() => {
     getTalkShows().then(setTalkShows);
   }, []);
+
+  async function handleDeleteTalkShow(talkShow: TalkShow) {
+    if (!window.confirm(`Delete “${talkShow.name}”? Your library PDFs will not be deleted.`)) {
+      return;
+    }
+
+    setDeletingTalkShowId(talkShow.id);
+    try {
+      await deleteTalkShow(talkShow.id);
+      setTalkShows((current) => current.filter((show) => show.id !== talkShow.id));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not delete talk show.");
+    } finally {
+      setDeletingTalkShowId(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -102,15 +119,25 @@ export default function TalkShows() {
 
                     <div className="mt-6 flex items-center justify-between border-t border-zinc-100 pt-4">
                       <span className="text-xs text-zinc-400">
-                        No content yet
+                        {talkShow.documentIds?.length ?? 0} selected file{(talkShow.documentIds?.length ?? 0) === 1 ? "" : "s"}
                       </span>
 
-                      <Link
-                        href={`/talk-shows/${talkShow.id}`}
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTalkShow(talkShow)}
+                          disabled={deletingTalkShowId === talkShow.id}
+                          className="text-xs font-medium text-red-600 transition hover:text-red-700 disabled:opacity-50"
+                        >
+                          {deletingTalkShowId === talkShow.id ? "Deleting…" : "Delete"}
+                        </button>
+                        <Link
+                          href={`/talk-shows/${talkShow.id}`}
                           className="text-sm font-medium text-zinc-900 hover:underline"
-                      >
+                        >
                           Open →
-                      </Link>
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 ))}
