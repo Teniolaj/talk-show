@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import BrandVisual from "../Components/brand-visual";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -60,10 +61,16 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-5">
-      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-8">
-        <h1 className="text-xl font-semibold text-zinc-900">Create your account</h1>
-        <p className="mt-1 text-sm text-zinc-500">Get started with Talkshow.</p>
+    <div className="auth-page grid min-h-screen lg:grid-cols-2">
+      <BrandVisual />
+      <main className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10">
+      <div className="auth-card w-full max-w-md p-8 sm:p-10">
+        <div className="mb-9">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ef6a4b] text-sm font-bold text-white">T</div>
+          <p className="mt-7 text-xs font-semibold uppercase tracking-[0.22em] text-[#b65d49]">Start creating</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-900">Your next great show starts here.</h1>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">Set up your studio, bring in your context, and go live with confidence.</p>
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -127,6 +134,7 @@ export default function SignupPage() {
           </Link>
         </p>
       </div>
+      </main>
     </div>
   );
 }

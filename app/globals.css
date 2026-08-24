@@ -339,3 +339,140 @@ html.dark main.ml-64 h1.text-2xl {
     border-radius: 1.25rem;
   }
 }
+
+/* Editorial broadcast refresh: warmer materials, bolder contrast, and less
+   of the generic gradient-dashboard feel. */
+html:not(.dark) body { background: #f4f0e9; }
+html:not(.dark) main.ml-64 { background: #f4f0e9; }
+html:not(.dark) aside.fixed {
+  background: #16322a;
+  border-right-color: rgba(255,255,255,.08);
+  box-shadow: none;
+}
+html:not(.dark) aside.fixed .text-zinc-900,
+html:not(.dark) aside.fixed .text-zinc-800 { color: #f7f3ec; }
+html:not(.dark) aside.fixed .text-zinc-600 { color: #b8c7be; }
+html:not(.dark) aside.fixed .text-zinc-400 { color: #8fa69a; }
+html:not(.dark) aside.fixed .bg-zinc-100 { background: rgba(255,255,255,.12); }
+html:not(.dark) aside.fixed .hover\:bg-zinc-100:hover { background: rgba(255,255,255,.09); }
+html:not(.dark) aside.fixed > div:first-child > a > div,
+html:not(.dark) .bg-zinc-900 { background: #17332b !important; }
+html:not(.dark) .hover\:bg-zinc-800:hover { background: #23443a !important; }
+html:not(.dark) main.ml-64 > header { background: rgba(244,240,233,.92); box-shadow: none; }
+html:not(.dark) main.ml-64 h1.text-2xl { background: none; color: #17332b; }
+html:not(.dark) .rounded-2xl.border.border-zinc-200.bg-white,
+html:not(.dark) .rounded-3xl.border.border-zinc-200.bg-white {
+  background: rgba(255,253,249,.94);
+  border-color: #e4ddd3;
+  box-shadow: 0 14px 34px -28px rgba(37,43,36,.42);
+  backdrop-filter: none;
+}
+html:not(.dark) .rounded-2xl.border.border-zinc-200.bg-white:hover { border-color: #d6b1a2; transform: translateY(-3px); }
+html:not(.dark) .bg-violet-50 { background-color: #f6e9e3; }
+html:not(.dark) .text-violet-600 { color: #bd593e; }
+html:not(.dark) .bg-blue-50 { background-color: #e5f0e9; }
+html:not(.dark) .text-blue-600 { color: #397258; }
+.dashboard-feature { box-shadow: 0 24px 54px -35px rgba(18,40,33,.75); }
+.auth-page { background: #f5f0e9; }
+.auth-card { border: 1px solid #e5ded4; border-radius: 2rem; background: rgba(255,253,249,.94); box-shadow: 0 28px 70px -42px rgba(31,50,42,.45); animation: auth-rise .65s ease-out both; }
+.auth-visual { min-height: 100vh; animation: visual-in .8s ease-out both; }
+@keyframes auth-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes visual-in { from { opacity: 0; transform: scale(1.025); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: no-preference) {
+  main.ml-64 > div > section { animation: section-in .5s ease-out both; }
+  main.ml-64 > div > section:nth-child(2) { animation-delay: .06s; }
+  main.ml-64 > div > section:nth-child(3) { animation-delay: .12s; }
+}
+@keyframes section-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Night studio: the dark counterpart of the editorial light palette. */
+html.dark body {
+  background:
+    radial-gradient(circle at 88% 4%, rgba(241,108,77,.15), transparent 24rem),
+    radial-gradient(circle at 15% 84%, rgba(74,146,111,.13), transparent 26rem),
+    #0b1915;
+}
+html.dark main.ml-64 { background: #0f211c; }
+html.dark main.ml-64 > header {
+  border-bottom-color: rgba(212,229,218,.09);
+  background: rgba(15,33,28,.88) !important;
+  box-shadow: none;
+}
+html.dark aside.fixed {
+  background: #091712;
+  border-right-color: rgba(212,229,218,.09);
+  box-shadow: none;
+}
+html.dark aside.fixed > div:first-child > a > div,
+html.dark .bg-zinc-900 { background: #1c4236 !important; }
+html.dark .hover\:bg-zinc-800:hover { background: #285849 !important; }
+html.dark .bg-zinc-950 { background-color: #091712 !important; }
+html.dark .bg-zinc-100 { background-color: #1a352d !important; }
+html.dark .bg-zinc-200 { background-color: #285047 !important; }
+html.dark .border-zinc-100,
+html.dark .border-zinc-200,
+html.dark .border-zinc-300 { border-color: rgba(204,224,212,.14) !important; }
+html.dark .rounded-2xl.border.border-zinc-200.bg-white,
+html.dark .rounded-3xl.border.border-zinc-200.bg-white {
+  background: #142a23 !important;
+  border-color: rgba(204,224,212,.14) !important;
+  box-shadow: 0 20px 38px -30px rgba(0,0,0,.75);
+}
+html.dark main.ml-64 h1.text-2xl { background: none; color: #f4f1e9; }
+html.dark .bg-violet-50 { background-color: rgba(241,108,77,.14); }
+html.dark .text-violet-600 { color: #ff9d86; }
+html.dark .bg-blue-50 { background-color: rgba(91,171,131,.14); }
+html.dark .text-blue-600 { color: #8ad0a8; }
+html.dark .auth-page { background: #0b1915; }
+html.dark .auth-card {
+  background: #142a23;
+  border-color: rgba(204,224,212,.14);
+  box-shadow: 0 28px 70px -38px rgba(0,0,0,.8);
+}
+html.dark .auth-card .text-zinc-900 { color: #f4f1e9 !important; }
+html.dark .auth-card .bg-white { background-color: #10231d !important; }
+html.dark .auth-card .border-zinc-200 { border-color: rgba(204,224,212,.18) !important; }
+
+/* Small, human-feeling motion cues. They are decorative, slow, and disabled
+   automatically for people who prefer reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-feature::before {
+    position: absolute;
+    right: 24%;
+    top: 12%;
+    z-index: 0;
+    width: 8rem;
+    height: 8rem;
+    border-radius: 9999px;
+    background: rgba(241,108,77,.28);
+    content: "";
+    filter: blur(2px);
+    animation: drift-orb 8s ease-in-out infinite alternate;
+  }
+  main.ml-64 .rounded-3xl.bg-zinc-900::after { background: rgba(244,177,113,.16); animation: drift-orb 10s ease-in-out infinite alternate-reverse; }
+  .dashboard-feature img { animation: studio-pan 16s ease-in-out infinite alternate; }
+  .auth-visual img { animation: studio-pan 20s ease-in-out infinite alternate; }
+  .auth-visual::before {
+    position: absolute;
+    right: -3rem;
+    top: 10%;
+    z-index: 1;
+    width: 13rem;
+    height: 13rem;
+    border: 1px solid rgba(255,255,255,.28);
+    border-radius: 9999px;
+    content: "";
+    animation: orbit-ring 15s linear infinite;
+  }
+  .auth-visual > * { z-index: 2; }
+  .rounded-2xl.border.border-zinc-200.bg-white { transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease; }
+}
+@keyframes drift-orb {
+  from { transform: translate3d(-10px, -7px, 0) scale(.96); }
+  to { transform: translate3d(18px, 14px, 0) scale(1.08); }
+}
+@keyframes studio-pan {
+  from { transform: scale(1.02) translateX(-1.2%); }
+  to { transform: scale(1.1) translateX(1.2%); }
+}
+@keyframes orbit-ring { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, FileCheck2, FileText, Library, Mic, Radio } from "lucide-react";
@@ -9,6 +10,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/user-display";
 import { getTalkShows, type TalkShow } from "@/lib/talk-shows";
 import { getStoredActivities, type StoredActivity } from "@/lib/recent-activity";
+import { getShowCover } from "@/lib/show-cover";
 
 type LibraryDocument = {
   id: string;
@@ -290,11 +292,12 @@ export default function Home() {
 
           {/* Get Started */}
           <section className="mt-8">
-            <div className="rounded-3xl bg-zinc-900 p-8 text-white">
-              <div className="flex flex-col justify-between gap-8 md:flex-row md:items-center">
+            <div className="dashboard-feature overflow-hidden rounded-3xl bg-zinc-900 text-white">
+              <div className="grid md:grid-cols-[1.15fr_0.85fr]">
+              <div className="p-8 md:p-10">
                 <div className="max-w-2xl">
                   <p className="text-xs font-medium uppercase tracking-widest text-zinc-400">
-                    Get Started
+                    Your studio, in motion
                   </p>
 
                   <h2 className="mt-3 text-2xl font-semibold tracking-tight">
@@ -309,10 +312,22 @@ export default function Home() {
 
                 <Link
                   href="/talk-shows"
-                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200"
+                  className="mt-7 inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200"
                 >
                   {talkShows.length === 0 ? "Create Talk Show →" : "Manage Talk Shows →"}
                 </Link>
+              </div>
+              <div className="relative hidden min-h-72 md:block">
+                <Image
+                  src="https://images.unsplash.com/photo-1756489947258-b7774b7671ff?auto=format&fit=crop&fm=jpg&ixlib=rb-4.1.0&q=85&w=1200"
+                  alt="Microphone in a live studio"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 35vw"
+                  className="object-cover opacity-90"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#18332b]/70 to-transparent" />
+                <p className="absolute bottom-7 left-7 rounded-full border border-white/25 bg-black/20 px-3 py-1.5 text-xs font-medium text-white/90 backdrop-blur">Ready when you are</p>
+              </div>
               </div>
             </div>
           </section>
@@ -357,18 +372,28 @@ export default function Home() {
                   <Link
                     key={talkShow.id}
                     href={`/talk-shows/${talkShow.id}`}
-                    className="rounded-2xl border border-zinc-200 bg-white p-5 transition hover:border-zinc-300 hover:shadow-sm"
+                    className="group relative min-h-48 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-900 p-5 text-white transition hover:border-zinc-300 hover:shadow-sm"
                   >
+                    <Image
+                      src={getShowCover(talkShow.category, talkShow.id)}
+                      alt="Studio microphone background"
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                      className="object-cover transition duration-700 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#10241e] via-[#10241e]/75 to-[#10241e]/20" />
+                    <div className="relative">
                     <div className="flex items-center justify-between">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-lg">🎙</span>
-                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium capitalize text-zinc-600">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-lg backdrop-blur-sm">🎙</span>
+                      <span className="rounded-full border border-white/20 bg-black/15 px-2.5 py-1 text-xs font-medium capitalize text-white/90 backdrop-blur-sm">
                         {talkShow.category}
                       </span>
                     </div>
-                    <h3 className="mt-4 font-semibold text-zinc-900">{talkShow.name}</h3>
-                    <p className="mt-2 text-sm text-zinc-500">
+                    <h3 className="mt-4 font-semibold">{talkShow.name}</h3>
+                    <p className="mt-2 text-sm text-white/70">
                       {talkShow.documentIds?.length ?? 0} selected document{(talkShow.documentIds?.length ?? 0) === 1 ? "" : "s"}
                     </p>
+                    </div>
                   </Link>
                 ))}
               </div>
