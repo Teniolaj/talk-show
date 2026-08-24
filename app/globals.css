@@ -5,6 +5,11 @@
   --foreground: #171717;
 }
 
+html.dark {
+  --background: #09090b;
+  --foreground: #ededed;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -12,15 +17,273 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(99, 102, 241, 0.10), transparent 28rem),
+    radial-gradient(circle at 92% 8%, rgba(14, 165, 233, 0.07), transparent 24rem),
+    var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+::selection { background: #c7d2fe; color: #18181b; }
+
+html.dark body {
+  background:
+    radial-gradient(circle at 10% -8%, rgba(99, 102, 241, 0.18), transparent 27rem),
+    radial-gradient(circle at 90% 4%, rgba(14, 165, 233, 0.10), transparent 25rem),
+    var(--background);
+}
+
+/* Shared visual language for the existing application surfaces. */
+main.ml-64 {
+  background: linear-gradient(145deg, rgba(250, 250, 250, 0.55), rgba(244, 244, 245, 0.7));
+}
+
+main.ml-64 > header {
+  box-shadow: 0 1px 0 rgba(24, 24, 27, 0.025), 0 8px 24px rgba(24, 24, 27, 0.025);
+}
+
+.rounded-2xl.border.border-zinc-200.bg-white,
+.rounded-3xl.border.border-zinc-200.bg-white {
+  box-shadow: 0 12px 32px -24px rgba(24, 24, 27, 0.30);
+}
+
+.rounded-2xl.border.border-zinc-200.bg-white:hover {
+  box-shadow: 0 18px 38px -26px rgba(24, 24, 27, 0.42);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+a[class*="transition"] {
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+button:not(:disabled):active,
+a[class*="transition"]:active {
+  transform: translateY(1px);
+}
+
+input,
+textarea,
+select {
+  box-shadow: inset 0 1px 2px rgba(24, 24, 27, 0.025);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+html.dark main.ml-64 {
+  background: linear-gradient(145deg, rgba(24, 24, 27, 0.84), rgba(9, 9, 11, 0.86));
+}
+
+html.dark main.ml-64 > header {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035), 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+html.dark .rounded-2xl.border.border-zinc-200.bg-white,
+html.dark .rounded-3xl.border.border-zinc-200.bg-white {
+  box-shadow: 0 16px 34px -26px rgba(0, 0, 0, 0.78);
+}
+
+/* Existing screens use light Tailwind utilities. These shared overrides make
+   the saved dark preference cover every route, including older screens. */
+html.dark .bg-white { background-color: #18181b !important; }
+html.dark .bg-zinc-50 { background-color: #09090b !important; }
+html.dark .bg-zinc-100 { background-color: #27272a !important; }
+html.dark .bg-zinc-200 { background-color: #3f3f46 !important; }
+html.dark .bg-zinc-900 { background-color: #18181b !important; }
+html.dark .bg-zinc-950 { background-color: #09090b !important; }
+html.dark .border-zinc-100,
+html.dark .border-zinc-200,
+html.dark .border-zinc-300 { border-color: #3f3f46 !important; }
+html.dark .text-zinc-900,
+html.dark .text-zinc-800 { color: #f4f4f5 !important; }
+html.dark .text-zinc-700,
+html.dark .text-zinc-600 { color: #d4d4d8 !important; }
+html.dark .text-zinc-500,
+html.dark .text-zinc-400 { color: #a1a1aa !important; }
+html.dark input,
+html.dark textarea,
+html.dark select { color: #f4f4f5; }
+
+/* Theme-choice previews should demonstrate their own appearance, not inherit
+   the active application theme. */
+html.dark .theme-preview-light,
+html.dark .theme-preview-light.bg-white { background-color: #ffffff !important; }
+html.dark .theme-preview-light .bg-zinc-50 { background-color: #fafafa !important; }
+html.dark .theme-preview-light .border-zinc-200 { border-color: #e4e4e7 !important; }
+html.dark .theme-preview-light .text-zinc-900 { color: #18181b !important; }
+html.dark .theme-preview-light .text-zinc-500 { color: #71717a !important; }
+
+.button-primary,
+.button-secondary,
+.field {
+  border-radius: 0.75rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.button-primary { background: #18181b; color: #fff; }
+.button-primary:hover { background: #27272a; box-shadow: 0 8px 16px -10px rgba(24, 24, 27, 0.65); }
+.button-primary:disabled { cursor: not-allowed; opacity: 0.5; }
+.button-secondary { border: 1px solid #e4e4e7; color: #27272a; }
+.button-secondary:hover { background: #fafafa; border-color: #d4d4d8; }
+.field { width: 100%; border: 1px solid #e4e4e7; background: #fff; color: #18181b; outline: none; }
+.field:focus { border-color: #18181b; }
+html.dark .button-primary { background: #f4f4f5; color: #18181b; }
+html.dark .button-primary:hover { background: #d4d4d8; }
+html.dark .button-secondary,
+html.dark .field { border-color: #3f3f46; background: #18181b; color: #f4f4f5; }
+html.dark .button-secondary:hover { background: #27272a; }
+html.dark .field:focus { border-color: #a1a1aa; }
+
+/* Final visual treatment: preserve the existing structure while giving every
+   workspace screen a distinctive, presentation-ready identity. */
+html:not(.dark) main.ml-64 {
+  background:
+    radial-gradient(circle at 94% 1%, rgba(168, 85, 247, 0.11), transparent 28rem),
+    radial-gradient(circle at 24% 24%, rgba(59, 130, 246, 0.07), transparent 25rem),
+    #f7f7fb;
+}
+
+html:not(.dark) aside.fixed {
+  border-right-color: rgba(228, 228, 231, 0.8);
+  background: linear-gradient(180deg, #ffffff 0%, #fafaff 68%, #f4f3ff 100%);
+  box-shadow: 12px 0 32px -30px rgba(76, 29, 149, 0.48);
+}
+
+html:not(.dark) aside.fixed > div:first-child > a > div {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 58%, #c026d3 100%);
+  box-shadow: 0 10px 18px -10px rgba(109, 40, 217, 0.72);
+}
+
+html:not(.dark) main.ml-64 > header {
+  border-bottom-color: rgba(228, 228, 231, 0.75);
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(16px);
+}
+
+html:not(.dark) .bg-zinc-900 {
+  background: linear-gradient(135deg, #4338ca 0%, #6d28d9 58%, #a21caf 100%) !important;
+}
+
+html:not(.dark) .hover\:bg-zinc-800:hover {
+  background: linear-gradient(135deg, #3730a3 0%, #5b21b6 58%, #86198f 100%) !important;
+}
+
+html:not(.dark) .bg-zinc-100 {
+  background-color: #f1efff;
+}
+
+html:not(.dark) .rounded-2xl.border.border-zinc-200.bg-white,
+html:not(.dark) .rounded-3xl.border.border-zinc-200.bg-white {
+  border-color: rgba(228, 228, 231, 0.82);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+}
+
+html:not(.dark) .rounded-2xl.border.border-zinc-200.bg-white:hover {
+  border-color: rgba(167, 139, 250, 0.55);
+  transform: translateY(-2px);
+}
+
+html:not(.dark) .border-dashed.border-zinc-300 {
+  border-color: rgba(139, 92, 246, 0.35);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(245, 243, 255, 0.82));
+}
+
+html:not(.dark) .text-green-700 { color: #15803d; }
+
+html:not(.dark) .button-primary {
+  background: linear-gradient(135deg, #4338ca 0%, #7c3aed 58%, #a21caf 100%);
+  box-shadow: 0 10px 20px -12px rgba(109, 40, 217, 0.78);
+}
+
+html:not(.dark) .button-primary:hover {
+  background: linear-gradient(135deg, #3730a3 0%, #5b21b6 58%, #86198f 100%);
+}
+
+html:not(.dark) a.rounded-xl.bg-zinc-900,
+html:not(.dark) button.rounded-xl.bg-zinc-900,
+html:not(.dark) a.rounded-lg.bg-zinc-900,
+html:not(.dark) button.rounded-lg.bg-zinc-900 {
+  box-shadow: 0 10px 20px -13px rgba(109, 40, 217, 0.76);
+}
+
+html.dark aside.fixed {
+  background: linear-gradient(180deg, #11111a 0%, #09090f 75%, #171126 100%);
+  box-shadow: 12px 0 36px -28px rgba(0, 0, 0, 0.9);
+}
+
+html.dark aside.fixed > div:first-child > a > div,
+html.dark .bg-zinc-900 {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #d946ef 100%) !important;
+}
+
+html.dark .rounded-2xl.border.border-zinc-200.bg-white,
+html.dark .rounded-3xl.border.border-zinc-200.bg-white {
+  border-color: rgba(82, 82, 91, 0.68) !important;
+  background: rgba(24, 24, 31, 0.88) !important;
+  backdrop-filter: blur(10px);
+}
+
+main.ml-64 h1.text-2xl {
+  letter-spacing: -0.045em;
+  background: linear-gradient(110deg, #18181b 5%, #4f46e5 48%, #a21caf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+main.ml-64 h2.text-lg {
+  letter-spacing: -0.025em;
+}
+
+main.ml-64 .px-10.py-10 > section,
+main.ml-64 .px-10.py-8 > section {
+  position: relative;
+}
+
+main.ml-64 .rounded-3xl.bg-zinc-900 {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 24px 42px -28px rgba(91, 33, 182, 0.72);
+}
+
+main.ml-64 .rounded-3xl.bg-zinc-900::after {
+  position: absolute;
+  right: -4rem;
+  top: -5rem;
+  width: 15rem;
+  height: 15rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  content: "";
+  filter: blur(2px);
+}
+
+main.ml-64 .rounded-3xl.bg-zinc-900 > * {
+  position: relative;
+  z-index: 1;
+}
+
+html.dark main.ml-64 h1.text-2xl {
+  background-image: linear-gradient(110deg, #ffffff 5%, #a5b4fc 46%, #f0abfc 100%);
 }
