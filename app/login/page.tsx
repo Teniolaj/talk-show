@@ -63,8 +63,8 @@ function LoginForm() {
         <div className="mb-9">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ef6a4b] text-sm font-bold text-white">T</div>
           <p className="mt-7 text-xs font-semibold uppercase tracking-[0.22em] text-[#b65d49]">Welcome back</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-900">Back in the control room.</h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-500">Sign in to pick up where your latest conversation left off.</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-900">Your next great answer is already in your content</h1>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">Never lose the right answer mid-conversation.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
