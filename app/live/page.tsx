@@ -401,11 +401,34 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     }
 
     setIsStarting(true);
-    setStatus("Requesting microphone access…");
+    setStatus("Requesting a session token…");
 
     closedByUserRef.current = false;
     connectedRef.current = false;
     connectionErrorRef.current = null;
+
+    let relayToken: string;
+
+    try {
+      const tokenRes = await fetch("/api/relay/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ talkShowId }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || !tokenData.token) {
+        setStatus(tokenData.error ?? "Could not start a live session — try again");
+        setIsStarting(false);
+        return;
+      }
+      relayToken = tokenData.token;
+    } catch {
+      setStatus("Could not reach the server to start this session");
+      setIsStarting(false);
+      return;
+    }
+
+    setStatus("Requesting microphone access…");
 
     // Clear previous session content
     setFinalText("");
@@ -426,9 +449,9 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
     mediaStreamRef.current = stream;
 
-  const socket = new WebSocket(
-  `${getRelayWebSocketUrl()}?type=live`
-);
+    const socket = new WebSocket(
+      `${getRelayWebSocketUrl()}?type=live&talkShowId=${encodeURIComponent(talkShowId)}&token=${encodeURIComponent(relayToken)}`
+    );
     socketRef.current = socket;
 
 
@@ -495,7 +518,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
       setStatus("Unable to connect to the live transcription service");
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       const wasConnected = connectedRef.current;
 
       socketRef.current = null;
@@ -510,6 +533,10 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
       if (closedByUserRef.current) {
         setStatus("Session stopped");
+      } else if (event.code === 4001) {
+        setStatus("This session token expired or was invalid — try starting again");
+      } else if (event.code === 4002) {
+        setStatus("Too many live sessions are running right now — try again shortly");
       } else if (wasConnected) {
         setStatus(
           "Live transcription connection closed"
@@ -606,7 +633,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
             </span>
 
             <Link
-              href="/display"
+              href={`/display?talkShowId=${encodeURIComponent(talkShowId)}`}
               target="_blank"
               className="ml-4 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900"
             >

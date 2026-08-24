@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const crypto = require('crypto');
 const express = require('express');
 const http = require('http');
 const { WebSocketServer } = require('ws');
@@ -10,6 +11,14 @@ if (!process.env.DEEPGRAM_API_KEY) {
   process.exit(1);
 }
 
+if (!process.env.RELAY_AUTH_SECRET) {
+  console.error('Missing RELAY_AUTH_SECRET. Copy .env.example to .env and set it to the same value as the Next.js app.');
+  process.exit(1);
+}
+
+const RELAY_AUTH_SECRET = process.env.RELAY_AUTH_SECRET;
+const MAX_CONCURRENT_LIVE_CONNECTIONS = Number(process.env.RELAY_MAX_LIVE_CONNECTIONS || 20);
+
 const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
 
 const app = express();
@@ -17,56 +26,132 @@ app.use(express.static('public'));
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-const displayClients = new Set();
-let latestDisplay = null;
 
-function broadcastDisplay(message) {
-  latestDisplay = { type: 'display', ...message };
+// One room per talk show — display clients only ever see the broadcasts
+// their own live session sends, instead of every session sharing one global
+// "latest detected content" value.
+const rooms = new Map();
 
-  for (const client of displayClients) {
+function getRoom(talkShowId) {
+  let room = rooms.get(talkShowId);
+  if (!room) {
+    room = { displayClients: new Set(), latestDisplay: null };
+    rooms.set(talkShowId, room);
+  }
+  return room;
+}
+
+function broadcastDisplay(talkShowId, message) {
+  const room = getRoom(talkShowId);
+  room.latestDisplay = { type: 'display', ...message };
+
+  for (const client of room.displayClients) {
     if (client.readyState === 1) {
-      client.send(JSON.stringify(latestDisplay));
+      client.send(JSON.stringify(room.latestDisplay));
     }
   }
 }
 
-function clearDisplay() {
-  latestDisplay = null;
+function clearDisplay(talkShowId) {
+  const room = getRoom(talkShowId);
+  room.latestDisplay = null;
 
-  for (const client of displayClients) {
+  for (const client of room.displayClients) {
     if (client.readyState === 1) {
       client.send(JSON.stringify({ type: 'clear' }));
     }
   }
 }
 
-wss.on('connection', (clientSocket, request) => {
-  const url = new URL(
-    request.url,
-    `http://${request.headers.host}`
-  );
+// Verifies the short-lived token minted by POST /api/relay/token in the
+// Next.js app (lib/relay-token.ts). Only someone with a valid Supabase
+// session for the owning talk show can get one, and it expires within a
+// minute — so this is what stops a stranger from opening a live connection
+// directly against the relay and burning Deepgram minutes on our key.
+function verifyRelayToken(token, talkShowId) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return false;
 
-  const clientType = url.searchParams.get('type');
+  const [payloadEncoded, signature] = token.split('.');
+  if (!payloadEncoded || !signature) return false;
 
-  console.log(`[client] connected: ${clientType || 'unknown'}`);
+  const expectedSignature = crypto
+    .createHmac('sha256', RELAY_AUTH_SECRET)
+    .update(payloadEncoded)
+    .digest('base64url');
 
-  // Display clients only receive detected content.
-if (clientType === 'display') {
-  displayClients.add(clientSocket);
-
-  console.log('[display] connected');
-
-  if (latestDisplay) {
-    clientSocket.send(JSON.stringify(latestDisplay));
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    return false;
   }
 
-  clientSocket.on('close', () => {
-    displayClients.delete(clientSocket);
-    console.log('[display] disconnected');
-  });
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadEncoded, 'base64url').toString('utf8'));
+  } catch {
+    return false;
+  }
 
-  return;
+  if (typeof payload.exp !== 'number' || Date.now() > payload.exp) return false;
+  if (payload.tsid !== talkShowId) return false;
+
+  return true;
 }
+
+let activeLiveConnections = 0;
+
+wss.on('connection', (clientSocket, request) => {
+  const url = new URL(request.url, `http://${request.headers.host}`);
+  const clientType = url.searchParams.get('type');
+  const talkShowId = url.searchParams.get('talkShowId');
+
+  // Display clients only receive detected content for their talk show.
+  if (clientType === 'display') {
+    if (!talkShowId) {
+      clientSocket.close(4000, 'talkShowId is required');
+      return;
+    }
+
+    const room = getRoom(talkShowId);
+    room.displayClients.add(clientSocket);
+
+    console.log(`[display] connected for talk show ${talkShowId}`);
+
+    if (room.latestDisplay) {
+      clientSocket.send(JSON.stringify(room.latestDisplay));
+    }
+
+    clientSocket.on('close', () => {
+      room.displayClients.delete(clientSocket);
+      console.log(`[display] disconnected from talk show ${talkShowId}`);
+    });
+
+    return;
+  }
+
+  if (clientType !== 'live') {
+    clientSocket.close(4003, 'Unknown client type');
+    return;
+  }
+
+  const token = url.searchParams.get('token');
+  if (!talkShowId || !verifyRelayToken(token, talkShowId)) {
+    console.log('[client] rejected: invalid or expired relay token');
+    clientSocket.close(4001, 'Unauthorized');
+    return;
+  }
+
+  if (activeLiveConnections >= MAX_CONCURRENT_LIVE_CONNECTIONS) {
+    console.log('[client] rejected: too many concurrent live connections');
+    clientSocket.close(4002, 'Too many concurrent sessions');
+    return;
+  }
+
+  activeLiveConnections++;
+  console.log(`[client] connected: live for talk show ${talkShowId} (${activeLiveConnections} active)`);
 
   // Live clients handle microphone audio + Deepgram.
   const dgConnection = deepgram.listen.live({
@@ -154,12 +239,12 @@ if (clientType === 'display') {
       const message = JSON.parse(audioChunk.toString());
 
       if (message.type === 'clear-display') {
-        clearDisplay();
+        clearDisplay(talkShowId);
         return;
       }
 
       if (message.type === 'display' && typeof message.content === 'string') {
-        broadcastDisplay({
+        broadcastDisplay(talkShowId, {
           title: typeof message.title === 'string' ? message.title : 'Detected information',
           content: message.content,
           source: typeof message.source === 'string' ? message.source : undefined,
@@ -178,7 +263,8 @@ if (clientType === 'display') {
   });
 
   clientSocket.on('close', () => {
-    console.log('[client] disconnected');
+    activeLiveConnections--;
+    console.log(`[client] disconnected (${activeLiveConnections} active)`);
 
     dgConnection.finish();
   });
