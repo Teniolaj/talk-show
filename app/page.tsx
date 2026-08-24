@@ -3,16 +3,44 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, CheckCircle2, FileCheck2, Library, Mic } from "lucide-react";
+import { Bell, CheckCircle2, FileCheck2, FileText, Library, Mic, Radio } from "lucide-react";
 import Sidebar from "./Components/sidebar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/user-display";
 import { getTalkShows, type TalkShow } from "@/lib/talk-shows";
+import { getStoredActivities, type StoredActivity } from "@/lib/recent-activity";
 
 type LibraryDocument = {
   id: string;
+  file_name: string;
   status: string;
+  created_at: string;
 };
+
+type RecentActivity = {
+  id: string;
+  type: "document" | "talk-show" | StoredActivity["type"];
+  title: string;
+  createdAt: string;
+};
+
+function formatActivityTime(dateString: string) {
+  const date = new Date(dateString);
+  const difference = Date.now() - date.getTime();
+  const minutes = Math.max(0, Math.floor(difference / 60_000));
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 export default function Home() {
   const router = useRouter();
@@ -21,6 +49,8 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [talkShows, setTalkShows] = useState<TalkShow[]>([]);
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
+  const [storedActivities, setStoredActivities] = useState<StoredActivity[]>([]);
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,12 +71,14 @@ export default function Home() {
 
   useEffect(() => {
     async function loadWorkspace() {
-      const [shows, documentsResponse] = await Promise.all([
+      const [shows, documentsResponse, activities] = await Promise.all([
         getTalkShows(),
         fetch("/api/documents"),
+        getStoredActivities(),
       ]);
 
       setTalkShows(shows);
+      setStoredActivities(activities);
       if (documentsResponse.ok) {
         const data = await documentsResponse.json();
         setDocuments(data.documents ?? []);
@@ -59,6 +91,23 @@ export default function Home() {
   }, []);
 
   const readyDocuments = documents.filter((document) => document.status === "ready").length;
+  const recentActivities: RecentActivity[] = [
+    ...documents.map((document) => ({
+      id: `document-${document.id}`,
+      type: "document" as const,
+      title: `${document.file_name} was added to your Content Library`,
+      createdAt: document.created_at,
+    })),
+    ...talkShows.map((talkShow) => ({
+      id: `talk-show-${talkShow.id}`,
+      type: "talk-show" as const,
+      title: `${talkShow.name} was created`,
+      createdAt: talkShow.createdAt,
+    })),
+    ...storedActivities,
+  ]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const visibleActivities = activityExpanded ? recentActivities : recentActivities.slice(0, 5);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -326,23 +375,55 @@ export default function Home() {
             )}
           </section>
 
-          {/* Empty Activity */}
+          {/* Recent Activity */}
           <section className="mt-10 pb-10">
-            <div className="mb-5">
-              <h2 className="text-lg font-semibold text-zinc-900">
-                Recent Activity
-              </h2>
-
-              <p className="mt-1 text-sm text-zinc-500">
-                Your recent activity will appear here.
-              </p>
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-zinc-900">Recent Activity</h2>
+                <p className="mt-1 text-sm text-zinc-500">The latest changes in your workspace.</p>
+              </div>
+              {recentActivities.length > 5 && (
+                <span className="hidden rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-500 sm:block">
+                  {recentActivities.length} updates
+                </span>
+              )}
             </div>
 
-            <div className="flex min-h-32 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-6">
-              <p className="text-sm text-zinc-400">
-                No activity yet.
-              </p>
-            </div>
+            {recentActivities.length === 0 ? (
+              <div className="flex min-h-32 items-center justify-center rounded-2xl border border-zinc-200 bg-white px-6">
+                <p className="text-sm text-zinc-400">No activity yet. Upload content or create a talk show to get started.</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-200/40">
+                <div className="divide-y divide-zinc-100 px-5">
+                  {visibleActivities.map((activity) => {
+                    const Icon = activity.type === "document" ? FileText : activity.type === "talk-show" ? Mic : activity.type === "documents-added" ? Library : Radio;
+                    const iconClass = activity.type === "document" ? "bg-blue-50 text-blue-600" : activity.type === "talk-show" ? "bg-violet-50 text-violet-600" : activity.type === "documents-added" ? "bg-amber-50 text-amber-600" : "bg-green-50 text-green-600";
+
+                    return (
+                      <div key={activity.id} className="flex items-center gap-3 py-3.5">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClass}`}>
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-zinc-800">{activity.title}</p>
+                        </div>
+                        <p className="shrink-0 text-xs text-zinc-400">{formatActivityTime(activity.createdAt)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+                {recentActivities.length > 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setActivityExpanded((expanded) => !expanded)}
+                    className="w-full border-t border-zinc-100 px-5 py-3 text-center text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900"
+                  >
+                    {activityExpanded ? "Show less" : `Show all activity (${recentActivities.length})`}
+                  </button>
+                )}
+              </div>
+            )}
           </section>
         </div>
       </main>
