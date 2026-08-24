@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import Sidebar from "@/app/Components/sidebar";
-import { getTalkShow, getTalkShows, type TalkShow } from "@/lib/talk-shows";
+import {
+  getTalkShow,
+  getTalkShows,
+  incrementTalkShowSessionCount,
+  type TalkShow,
+} from "@/lib/talk-shows";
 import {
   defaultLivePreferences,
   readLivePreferences,
@@ -536,6 +541,13 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     socketRef.current?.close();
 
     setStatus("Session stopped");
+
+    if (isLive && talkShowId) {
+      incrementTalkShowSessionCount(talkShowId)
+        .then(setTalkShow)
+        .catch((error) => console.error("Failed to record session count", error));
+    }
+
     setIsLive(false);
   }
 

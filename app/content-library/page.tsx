@@ -10,10 +10,21 @@ type Document = {
   created_at: string;
 };
 
+// Keep in sync with lib/document-ingestion.ts's MIME_TYPES_BY_EXTENSION —
+// that's what the ingestion pipeline actually accepts.
+const SUPPORTED_EXTENSIONS = ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"];
+const SUPPORTED_ACCEPT = SUPPORTED_EXTENSIONS.map((ext) => `.${ext}`).join(",");
+
+function hasSupportedExtension(filename: string): boolean {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return !!ext && SUPPORTED_EXTENSIONS.includes(ext);
+}
+
 export default function ContentLibrary() {
   const [showAddContent, setShowAddContent] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
@@ -41,14 +52,21 @@ export default function ContentLibrary() {
   }, []);
 
   async function handleAddContent() {
-    if (!selectedFile || uploading) return;
+    if (files.length === 0 || uploading) return;
+
+    const unsupported = files.filter((file) => !hasSupportedExtension(file.name));
+    if (unsupported.length > 0) {
+      setUploadError(`Unsupported file type. Remove: ${unsupported.map((file) => file.name).join(", ")}`);
+      return;
+    }
 
     setUploading(true);
+    setUploadError(null);
 
     try {
       const formData = new FormData();
 
-      formData.append("files", selectedFile);
+      files.forEach((file) => formData.append("files", file));
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -72,10 +90,8 @@ export default function ContentLibrary() {
         );
       }
 
-      setSelectedFile(null);
+      setFiles([]);
       setShowAddContent(false);
-
-      alert("Content uploaded successfully.");
 
       // Refresh documents after upload
       const documentsResponse = await fetch("/api/documents");
@@ -88,7 +104,7 @@ export default function ContentLibrary() {
     } catch (error) {
       console.error("Upload failed:", error);
 
-      alert(
+      setUploadError(
         error instanceof Error
           ? error.message
           : "Something went wrong while uploading."
@@ -143,7 +159,7 @@ export default function ContentLibrary() {
             </h1>
 
             <p className="mt-1 text-sm text-zinc-500">
-              Your private PDF library. Choose which documents each talk show can use.
+              Your private document library. Choose which documents each talk show can use.
             </p>
           </div>
 
@@ -261,14 +277,15 @@ export default function ContentLibrary() {
                 </h2>
 
                 <p className="mt-1 text-sm text-zinc-500">
-                  Add a document to your content library.
+                  Add one or more documents to your content library.
                 </p>
               </div>
 
               <button
                 onClick={() => {
                   setShowAddContent(false);
-                  setSelectedFile(null);
+                  setFiles([]);
+                  setUploadError(null);
                 }}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
               >
@@ -283,31 +300,53 @@ export default function ContentLibrary() {
               </div>
 
               <h3 className="mt-4 font-medium text-zinc-900">
-                {selectedFile ? selectedFile.name : "Upload a document"}
+                {files.length > 0 ? `${files.length} file${files.length === 1 ? "" : "s"} selected` : "Upload documents"}
               </h3>
 
               <p className="mt-1 text-sm text-zinc-500">
-                {selectedFile
-                  ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
-                  : "PDF files are supported"}
+                PDF, Word, PowerPoint, and Excel files are supported
               </p>
 
               <label className="mt-5 inline-block cursor-pointer rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100">
-                {selectedFile ? "Choose Another File" : "Choose File"}
+                {files.length > 0 ? "Choose More Files" : "Choose Files"}
 
                 <input
                   type="file"
-                  accept=".pdf,application/pdf"
+                  multiple
+                  accept={SUPPORTED_ACCEPT}
                   className="hidden"
                   onChange={(event) => {
-                    const file = event.target.files?.[0] || null;
+                    const selected = Array.from(event.target.files ?? []);
 
-                    if (file) {
-                      setSelectedFile(file);
+                    if (selected.length > 0) {
+                      setFiles((current) => [...current, ...selected]);
                     }
                   }}
                 />
               </label>
+
+              {files.length > 0 && (
+                <ul className="mt-5 space-y-1.5 text-left">
+                  {files.map((file, index) => (
+                    <li
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm text-zinc-900"
+                    >
+                      <span className="truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
+                        className="ml-3 shrink-0 text-zinc-400 hover:text-zinc-900"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {uploadError && <p className="mt-4 text-sm text-red-500">{uploadError}</p>}
             </div>
 
             {/* Actions */}
@@ -315,7 +354,8 @@ export default function ContentLibrary() {
               <button
                 onClick={() => {
                   setShowAddContent(false);
-                  setSelectedFile(null);
+                  setFiles([]);
+                  setUploadError(null);
                 }}
                 className="rounded-xl px-5 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100"
               >
@@ -324,14 +364,14 @@ export default function ContentLibrary() {
 
               <button
                 onClick={handleAddContent}
-                disabled={!selectedFile || uploading}
+                disabled={files.length === 0 || uploading}
                 className={`rounded-xl px-5 py-2.5 text-sm font-medium transition ${
-                  selectedFile && !uploading
+                  files.length > 0 && !uploading
                     ? "bg-zinc-900 text-white hover:bg-zinc-800"
                     : "cursor-not-allowed bg-zinc-200 text-zinc-400"
                 }`}
               >
-                {uploading ? "Uploading..." : "Add Content"}
+                {uploading ? "Uploading..." : `Upload ${files.length || ""} file${files.length === 1 ? "" : "s"}`}
               </button>
             </div>
           </div>
