@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Sidebar from "../../Components/sidebar";
 import {
   getTalkShow,
@@ -31,11 +31,7 @@ export default function TalkShowDetails() {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [savingSelection, setSavingSelection] = useState(false);
   const [deletingTalkShow, setDeletingTalkShow] = useState(false);
-  const [showUploader, setShowUploader] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   useEffect(() => {
     getTalkShow(id).then((show) => {
@@ -54,51 +50,6 @@ export default function TalkShowDetails() {
   useEffect(() => {
     fetchDocuments().then(setDocuments);
   }, [fetchDocuments]);
-
-  async function handleUpload() {
-    if (!talkShow || files.length === 0) return;
-
-    const nonPdf = files.filter((file) => !file.name.toLowerCase().endsWith(".pdf"));
-    if (nonPdf.length > 0) {
-      setUploadError(`Only PDF is supported right now. Remove: ${nonPdf.map((file) => file.name).join(", ")}`);
-      return;
-    }
-
-    setUploading(true);
-    setUploadError(null);
-
-    try {
-      const formData = new FormData();
-      files.forEach((f) => formData.append("files", f));
-
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setUploadError(data.error ?? "Upload failed");
-      } else {
-        const failed = (data.results ?? []).filter((r: { error?: string }) => r.error);
-        if (failed.length > 0) {
-          setUploadError(failed.map((r: { filename: string; error?: string }) => `${r.filename}: ${r.error}`).join("; "));
-        }
-        setSelectedDocumentIds((current) => [
-          ...new Set([
-            ...current,
-            ...(data.results ?? [])
-              .filter((result: { error?: string }) => !result.error)
-              .map((result: { documentId: string }) => result.documentId),
-          ]),
-        ]);
-        setDocuments(await fetchDocuments());
-      }
-    } catch {
-      setUploadError("Upload request failed — check server logs");
-    } finally {
-      setUploading(false);
-      setFiles([]);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  }
 
   async function saveDocumentSelection() {
     if (!talkShow) return;
@@ -120,8 +71,9 @@ export default function TalkShowDetails() {
           title: `${addedDocumentCount} document${addedDocumentCount === 1 ? " was" : "s were"} added to ${talkShow.name}`,
         });
       }
+      setSelectionError(null);
     } catch (error) {
-      setUploadError(
+      setSelectionError(
         error instanceof Error ? error.message : "Could not save document selection."
       );
     } finally {
@@ -149,7 +101,7 @@ export default function TalkShowDetails() {
       router.push("/talk-shows");
       router.refresh();
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Could not delete talk show.");
+      setSelectionError(error instanceof Error ? error.message : "Could not delete talk show.");
       setDeletingTalkShow(false);
     }
   }
@@ -256,11 +208,13 @@ export default function TalkShowDetails() {
                 <p className="text-sm text-zinc-500">Live Sessions</p>
 
                 <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                  0
+                  {talkShow.sessionCount ?? 0}
                 </p>
 
                 <p className="mt-2 text-xs text-zinc-400">
-                  No sessions yet
+                  {talkShow.sessionCount
+                    ? `${talkShow.sessionCount} session${talkShow.sessionCount === 1 ? "" : "s"} completed`
+                    : "No sessions yet"}
                 </p>
               </div>
 
@@ -292,68 +246,15 @@ export default function TalkShowDetails() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowUploader((v) => !v)}
+              <Link
+                href="/content-library"
                 className="rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
               >
                 + Add to Library
-              </button>
+              </Link>
             </div>
 
-            {showUploader && (
-              <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-6">
-                <input
-                  ref={inputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,application/pdf"
-                  onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                  className="hidden"
-                />
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <button
-                    type="button"
-                    onClick={() => inputRef.current?.click()}
-                    className="w-fit rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
-                  >
-                    Choose files
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleUpload}
-                    disabled={files.length === 0 || uploading}
-                    className="w-fit rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40"
-                  >
-                    {uploading ? "Uploading…" : `Upload ${files.length || ""} file${files.length === 1 ? "" : "s"}`}
-                  </button>
-                </div>
-
-                {files.length > 0 && (
-                  <ul className="mt-4 space-y-1.5">
-                    {files.map((f, i) => (
-                      <li
-                        key={`${f.name}-${i}`}
-                        className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-900"
-                      >
-                        <span className="truncate">{f.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                          className="ml-3 shrink-0 text-zinc-400 hover:text-zinc-900"
-                          aria-label={`Remove ${f.name}`}
-                        >
-                          ✕
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {uploadError && <p className="mt-3 text-sm text-red-500">{uploadError}</p>}
-              </div>
-            )}
+            {selectionError && <p className="mt-3 text-sm text-red-500">{selectionError}</p>}
 
             {documents.length === 0 ? (
               <div className="mt-5 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white px-6 text-center">
@@ -366,17 +267,16 @@ export default function TalkShowDetails() {
                 </h3>
 
                 <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
-                  Add documents or other supported content to give your
+                  Add documents to your content library to give your
                   talk show information to work with during live sessions.
                 </p>
 
-                <button
-                  type="button"
-                  onClick={() => setShowUploader(true)}
+                <Link
+                  href="/content-library"
                   className="mt-5 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800"
                 >
                   Add Your First Content
-                </button>
+                </Link>
               </div>
             ) : (
               <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
