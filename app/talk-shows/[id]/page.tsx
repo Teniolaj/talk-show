@@ -10,6 +10,7 @@ import {
   updateTalkShowDocuments,
   type TalkShow,
 } from "@/lib/talk-shows";
+import { recordActivity } from "@/lib/recent-activity";
 
 type RepoDocument = {
   id: string;
@@ -104,11 +105,21 @@ export default function TalkShowDetails() {
 
     setSavingSelection(true);
     try {
+      const addedDocumentCount = selectedDocumentIds.filter(
+        (documentId) => !(talkShow.documentIds ?? []).includes(documentId)
+      ).length;
       const updatedTalkShow = await updateTalkShowDocuments(
         talkShow.id,
         selectedDocumentIds
       );
       setTalkShow(updatedTalkShow);
+
+      if (addedDocumentCount > 0) {
+        await recordActivity({
+          type: "documents-added",
+          title: `${addedDocumentCount} document${addedDocumentCount === 1 ? " was" : "s were"} added to ${talkShow.name}`,
+        });
+      }
     } catch (error) {
       setUploadError(
         error instanceof Error ? error.message : "Could not save document selection."

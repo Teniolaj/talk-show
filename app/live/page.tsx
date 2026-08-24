@@ -10,6 +10,7 @@ import {
   readLivePreferences,
   type LivePreferences,
 } from "@/lib/live-preferences";
+import { recordActivity } from "@/lib/recent-activity";
 
 function getRelayWebSocketUrl() {
   if (process.env.NEXT_PUBLIC_RELAY_WS_URL) {
@@ -537,6 +538,13 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
     setStatus("Session stopped");
     setIsLive(false);
+
+    if (talkShow) {
+      recordActivity({
+        type: "session-completed",
+        title: `${talkShow.name} live session completed`,
+      }).catch((error) => console.error("Failed to record session activity", error));
+    }
   }
 
   return (
