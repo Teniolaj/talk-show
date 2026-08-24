@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import Sidebar from "../Components/sidebar";
 import { deleteTalkShow, getTalkShows, type TalkShow } from "@/lib/talk-shows";
+import { getShowCover } from "@/lib/show-cover";
 
 export default function TalkShows() {
   const [talkShows, setTalkShows] = useState<TalkShow[]>([]);
@@ -14,10 +16,6 @@ export default function TalkShows() {
   }, []);
 
   async function handleDeleteTalkShow(talkShow: TalkShow) {
-    if (!window.confirm(`Delete “${talkShow.name}”? Your library PDFs will not be deleted.`)) {
-      return;
-    }
-
     setDeletingTalkShowId(talkShow.id);
     try {
       await deleteTalkShow(talkShow.id);
@@ -97,46 +95,38 @@ export default function TalkShows() {
                 {talkShows.map((talkShow) => (
                   <div
                     key={talkShow.id}
-                    className="rounded-2xl border border-zinc-200 bg-white p-6 transition hover:border-zinc-300 hover:shadow-sm"
+                    className="group relative min-h-80 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-900 transition hover:border-zinc-300 hover:shadow-sm"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-zinc-100 text-xl">
-                        🎙
+                    <Image
+                      src={getShowCover(talkShow.category, talkShow.id)}
+                      alt="Studio microphone background"
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                      className="object-cover transition duration-700 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#10241e] via-[#10241e]/75 to-[#10241e]/20" />
+                    <div className="relative flex min-h-80 flex-col p-6 text-white">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-xl backdrop-blur-sm">🎙</div>
+
+                        <span className="rounded-full border border-white/20 bg-black/15 px-3 py-1 text-xs font-medium capitalize text-white/90 backdrop-blur-sm">{talkShow.category}</span>
                       </div>
 
-                      <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium capitalize text-zinc-600">
-                        {talkShow.category}
-                      </span>
-                    </div>
+                      <div className="mt-auto">
+                        <h3 className="text-xl font-semibold tracking-tight">{talkShow.name}</h3>
 
-                    <h3 className="mt-5 text-lg font-semibold text-zinc-900">
-                      {talkShow.name}
-                    </h3>
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/72">{talkShow.description}</p>
 
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-500">
-                      {talkShow.description}
-                    </p>
+                        <div className="mt-6 flex items-center justify-between border-t border-white/15 pt-4">
+                          <span className="text-xs text-white/65">{talkShow.documentIds?.length ?? 0} selected file{(talkShow.documentIds?.length ?? 0) === 1 ? "" : "s"}</span>
 
-                    <div className="mt-6 flex items-center justify-between border-t border-zinc-100 pt-4">
-                      <span className="text-xs text-zinc-400">
-                        {talkShow.documentIds?.length ?? 0} selected file{(talkShow.documentIds?.length ?? 0) === 1 ? "" : "s"}
-                      </span>
-
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTalkShow(talkShow)}
-                          disabled={deletingTalkShowId === talkShow.id}
-                          className="text-xs font-medium text-red-600 transition hover:text-red-700 disabled:opacity-50"
-                        >
-                          {deletingTalkShowId === talkShow.id ? "Deleting…" : "Delete"}
-                        </button>
-                        <Link
-                          href={`/talk-shows/${talkShow.id}`}
-                          className="text-sm font-medium text-zinc-900 hover:underline"
-                        >
-                          Open →
-                        </Link>
+                          <div className="flex items-center gap-3">
+                            <button type="button" onClick={() => handleDeleteTalkShow(talkShow)} disabled={deletingTalkShowId === talkShow.id} className="text-xs font-medium text-[#ffb09d] transition hover:text-white disabled:opacity-50">
+                              {deletingTalkShowId === talkShow.id ? "Deleting…" : "Delete"}
+                            </button>
+                            <Link href={`/talk-shows/${talkShow.id}`} className="text-sm font-medium text-white hover:underline">Open →</Link>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

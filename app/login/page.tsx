@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import BrandVisual from "../Components/brand-visual";
 
 export default function LoginPage() {
   return (
@@ -16,7 +17,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/talk-shows";
+  const next = searchParams.get("next") || "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,10 +56,16 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-5">
-      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-8">
-        <h1 className="text-xl font-semibold text-zinc-900">Sign in to Talkshow</h1>
-        <p className="mt-1 text-sm text-zinc-500">Welcome back.</p>
+    <div className="auth-page grid min-h-screen lg:grid-cols-2">
+      <BrandVisual />
+      <main className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10">
+      <div className="auth-card w-full max-w-md p-8 sm:p-10">
+        <div className="mb-9">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ef6a4b] text-sm font-bold text-white">T</div>
+          <p className="mt-7 text-xs font-semibold uppercase tracking-[0.22em] text-[#b65d49]">Welcome back</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-900">Back in the control room.</h1>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">Sign in to pick up where your latest conversation left off.</p>
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -121,6 +128,7 @@ function LoginForm() {
           </Link>
         </p>
       </div>
+      </main>
     </div>
   );
 }
