@@ -33,7 +33,7 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-::selection { background: #c7d2fe; color: #18181b; }
+::selection { background: #f7c6b8; color: #17332b; }
 
 html.dark body {
   background:
@@ -84,7 +84,7 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 3px rgba(241, 108, 77, 0.16);
 }
 
 html.dark main.ml-64 {
@@ -268,7 +268,7 @@ main.ml-64 .px-10.py-8 > section {
 main.ml-64 .rounded-3xl.bg-zinc-900 {
   position: relative;
   overflow: hidden;
-  box-shadow: 0 24px 42px -28px rgba(91, 33, 182, 0.72);
+  box-shadow: 0 24px 42px -28px rgba(18, 40, 33, 0.52);
 }
 
 main.ml-64 .rounded-3xl.bg-zinc-900::after {

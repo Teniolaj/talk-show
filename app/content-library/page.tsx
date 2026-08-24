@@ -284,7 +284,7 @@ export default function ContentLibrary() {
                         toggleDocumentSelection(document.id);
                       }
                     } : undefined}
-                    className={`rounded-2xl border bg-white p-6 transition hover:shadow-sm ${selectionMode ? "cursor-pointer" : ""} ${selectedDocumentIds.includes(document.id) ? "border-violet-500 ring-2 ring-violet-200" : "border-zinc-200 hover:border-zinc-300"}`}
+                    className={`rounded-2xl border bg-white p-6 transition hover:shadow-sm ${selectionMode ? "cursor-pointer" : ""} ${selectedDocumentIds.includes(document.id) ? "border-[#ef6a4b] ring-2 ring-[#f8d8cf]" : "border-zinc-200 hover:border-zinc-300"}`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-zinc-100 text-xl">
@@ -296,7 +296,7 @@ export default function ContentLibrary() {
                           {document.status}
                         </span>
                         {selectionMode && selectedDocumentIds.includes(document.id) && (
-                          <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">Selected</span>
+                          <span className="rounded-full bg-[#fbe7e1] px-2.5 py-1 text-xs font-medium text-[#b84f35]">Selected</span>
                         )}
                       </div>
                     </div>
