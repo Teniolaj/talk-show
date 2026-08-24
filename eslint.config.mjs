@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The audio relay is a separate CommonJS Node service with its own package.
+    "relay/**",
   ]),
 ]);
 
