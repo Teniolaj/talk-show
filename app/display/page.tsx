@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 function getRelayWebSocketUrl() {
   if (process.env.NEXT_PUBLIC_RELAY_WS_URL) {
@@ -18,11 +19,24 @@ type DisplayContent = {
 };
 
 export default function DisplayPage() {
+  return (
+    <Suspense fallback={null}>
+      <DisplayScreen />
+    </Suspense>
+  );
+}
+
+function DisplayScreen() {
+  const talkShowId = useSearchParams().get("talkShowId");
   const [display, setDisplay] = useState<DisplayContent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const socket = new WebSocket(`${getRelayWebSocketUrl()}?type=display`);
+    if (!talkShowId) return;
+
+    const socket = new WebSocket(
+      `${getRelayWebSocketUrl()}?type=display&talkShowId=${encodeURIComponent(talkShowId)}`
+    );
 
     socket.onopen = () => setIsConnected(true);
 
@@ -40,7 +54,20 @@ export default function DisplayPage() {
     socket.onclose = () => setIsConnected(false);
 
     return () => socket.close();
-  }, []);
+  }, [talkShowId]);
+
+  if (!talkShowId) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#090b12] px-6 text-center text-white">
+        <div>
+          <h1 className="text-2xl font-semibold">No talk show specified</h1>
+          <p className="mt-3 text-zinc-400">
+            Open this screen from a live session&apos;s &quot;Open Projector View&quot; link.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative flex min-h-screen overflow-hidden bg-[#090b12] px-6 py-7 text-white sm:px-10 lg:px-16">

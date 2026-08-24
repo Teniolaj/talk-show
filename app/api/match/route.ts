@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getSupabaseServerAuthClient } from "@/lib/supabase/server";
 import { embedText } from "@/lib/gemini-embed";
+import { isRateLimited } from "@/lib/rate-limit";
+
+// A live session checks roughly once per finalized speech segment, so this
+// comfortably covers real usage while blocking a script from hammering the
+// endpoint and running up the Gemini embedding bill.
+const MATCH_RATE_LIMIT = 20;
+const MATCH_RATE_WINDOW_MS = 10_000;
 
 // Tuned from live testing: gemini-embedding-001 at 1536 dims puts genuinely
 // relevant chunks around 0.6-0.77 cosine similarity and off-topic ones around
@@ -75,6 +82,10 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  if (isRateLimited(`match:${user.id}`, MATCH_RATE_LIMIT, MATCH_RATE_WINDOW_MS)) {
+    return NextResponse.json({ error: "Too many match requests — slow down" }, { status: 429 });
   }
 
   const talkShows = (user.user_metadata?.talkShows ?? []) as Array<{

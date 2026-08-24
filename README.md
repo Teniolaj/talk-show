@@ -14,6 +14,7 @@ cd relay && npm install && cd ..
 2. Set up environment variables:
    - Copy `.env.local.example` to `.env.local` in the project root (Supabase keys) — ask a team member for the values.
    - Copy `relay/.env.example` to `relay/.env` and add your `DEEPGRAM_API_KEY`.
+   - Generate a relay secret with `openssl rand -hex 32` and set it as `RELAY_AUTH_SECRET` in **both** `.env.local` and `relay/.env` — they must match. The Next.js app uses it to mint short-lived tokens that authorize a browser to open a live session on the relay; without it, anyone who can reach the relay's port could stream audio through your Deepgram key.
 
 3. Start the relay server (in its own terminal, leave it running):
 
