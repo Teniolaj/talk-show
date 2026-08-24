@@ -12,6 +12,7 @@ export default function Sidebar() {
 
   const [email, setEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -53,9 +54,28 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-zinc-200 bg-white transition-colors dark:border-zinc-800 dark:bg-zinc-950">
+    <>
+      <button
+        type="button"
+        onClick={() => setMobileMenuOpen(true)}
+        className="fixed left-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-lg text-zinc-900 shadow-sm lg:hidden dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+        aria-label="Open navigation menu"
+      >
+        ☰
+      </button>
+
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 z-30 bg-zinc-950/35 lg:hidden"
+        />
+      )}
+
+    <aside className={`fixed left-0 top-0 z-40 flex h-screen w-72 -translate-x-full flex-col border-r border-zinc-200 bg-white transition-transform duration-200 lg:w-64 lg:translate-x-0 dark:border-zinc-800 dark:bg-zinc-950 ${mobileMenuOpen ? "translate-x-0" : ""}`}>
       {/* Logo */}
-      <div className="flex h-20 items-center px-7">
+      <div className="flex h-20 items-center justify-between px-7">
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-sm font-bold text-white dark:bg-white dark:text-zinc-900">
             T
@@ -65,6 +85,14 @@ export default function Sidebar() {
             Talkshow
           </span>
         </Link>
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(false)}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-zinc-500 hover:bg-zinc-100 lg:hidden dark:hover:bg-zinc-800"
+          aria-label="Close navigation menu"
+        >
+          ×
+        </button>
       </div>
 
       {/* Navigation */}
@@ -157,5 +185,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

@@ -291,3 +291,51 @@ main.ml-64 .rounded-3xl.bg-zinc-900 > * {
 html.dark main.ml-64 h1.text-2xl {
   background-image: linear-gradient(110deg, #ffffff 5%, #a5b4fc 46%, #f0abfc 100%);
 }
+
+/* Workspace navigation and spacing adapt at tablet and phone sizes. */
+@media (max-width: 1023px) {
+  main.ml-64 {
+    margin-left: 0;
+    min-width: 0;
+  }
+
+  main.ml-64 > header {
+    padding: 1.25rem 1.25rem 1.25rem 4.5rem !important;
+  }
+
+  main.ml-64 > .px-10,
+  main.ml-64 > .mx-auto.px-10,
+  main.ml-64 .mx-auto.px-10 {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+  }
+}
+
+@media (max-width: 639px) {
+  main.ml-64 > header.flex {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  main.ml-64 > header.flex > a:last-child,
+  main.ml-64 > header.flex > button:last-child {
+    width: 100%;
+  }
+
+  main.ml-64 > header.flex > a:last-child.rounded-xl,
+  main.ml-64 > header.flex > button:last-child.rounded-xl {
+    width: 100%;
+    justify-content: center;
+  }
+
+  main.ml-64 .px-10.py-10,
+  main.ml-64 .px-10.py-8 {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+
+  main.ml-64 .rounded-3xl {
+    border-radius: 1.25rem;
+  }
+}

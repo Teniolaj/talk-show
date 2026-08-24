@@ -28,9 +28,13 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
-  const { documentId } = (await request.json()) as { documentId?: string };
-  if (!documentId) {
-    return NextResponse.json({ error: "documentId is required" }, { status: 400 });
+  const { documentId, documentIds } = (await request.json()) as {
+    documentId?: string;
+    documentIds?: string[];
+  };
+  const idsToDelete = [...new Set(documentIds ?? (documentId ? [documentId] : []))];
+  if (idsToDelete.length === 0) {
+    return NextResponse.json({ error: "At least one documentId is required" }, { status: 400 });
   }
 
   const authClient = await getSupabaseServerAuthClient();
@@ -42,25 +46,24 @@ export async function DELETE(request: Request) {
   }
 
   const supabase = getSupabaseServerClient();
-  const { data: document, error: documentError } = await supabase
+  const { data: documents, error: documentError } = await supabase
     .from("repo_documents")
     .select("id, file_name")
-    .eq("id", documentId)
     .eq("repo_id", user.id)
-    .maybeSingle();
+    .in("id", idsToDelete);
 
   if (documentError) {
     return NextResponse.json({ error: documentError.message }, { status: 500 });
   }
-  if (!document) {
-    return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  if (!documents || documents.length !== idsToDelete.length) {
+    return NextResponse.json({ error: "One or more documents were not found" }, { status: 404 });
   }
 
   const { error: chunksError } = await supabase
     .from("repo_chunks")
     .delete()
     .eq("repo_id", user.id)
-    .eq("document_id", documentId);
+    .in("document_id", idsToDelete);
   if (chunksError) {
     return NextResponse.json({ error: chunksError.message }, { status: 500 });
   }
@@ -68,25 +71,25 @@ export async function DELETE(request: Request) {
   const { error: documentDeleteError } = await supabase
     .from("repo_documents")
     .delete()
-    .eq("id", documentId)
-    .eq("repo_id", user.id);
+    .eq("repo_id", user.id)
+    .in("id", idsToDelete);
   if (documentDeleteError) {
     return NextResponse.json({ error: documentDeleteError.message }, { status: 500 });
   }
 
   // Documents uploaded before per-user libraries used the shorter legacy path.
   // Removing both is safe: Supabase ignores paths that no longer exist.
-  const storagePaths = [
+  const storagePaths = documents.flatMap((document) => [
     `${user.id}/${document.id}/${document.file_name}`,
     `${document.id}/${document.file_name}`,
-  ];
+  ]);
   const talkShows = (user.user_metadata?.talkShows ?? []) as Array<{
     id: string;
     documentIds?: string[];
   }>;
   const updatedTalkShows = talkShows.map((show) => ({
     ...show,
-    documentIds: (show.documentIds ?? []).filter((id) => id !== documentId),
+    documentIds: (show.documentIds ?? []).filter((id) => !idsToDelete.includes(id)),
   }));
   const [storageResult, metadataResult] = await Promise.all([
     supabase.storage.from("repo-documents").remove(storagePaths),
@@ -102,7 +105,7 @@ export async function DELETE(request: Request) {
     console.error("Document deleted but could not update talk show selections", metadataError);
   }
 
-  return NextResponse.json({ deleted: true });
+  return NextResponse.json({ deleted: true, deletedIds: idsToDelete });
   } catch (error) {
     console.error("Document deletion failed", error);
     return NextResponse.json(

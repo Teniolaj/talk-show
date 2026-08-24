@@ -27,7 +27,10 @@ export default function ContentLibrary() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
-  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [deletingDocumentIds, setDeletingDocumentIds] = useState<string[]>([]);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadDocuments() {
@@ -114,18 +117,24 @@ export default function ContentLibrary() {
     }
   }
 
-  async function handleDeleteDocument(document: Document) {
-    const confirmed = window.confirm(
-      `Delete “${document.file_name}”? It will be removed from your library and from every talk show that uses it.`
+  function toggleDocumentSelection(documentId: string) {
+    setSelectedDocumentIds((current) =>
+      current.includes(documentId)
+        ? current.filter((id) => id !== documentId)
+        : [...current, documentId]
     );
-    if (!confirmed) return;
+  }
 
-    setDeletingDocumentId(document.id);
+  async function handleDeleteDocuments(documentIds: string[]) {
+    if (documentIds.length === 0 || deletingDocumentIds.length > 0) return;
+
+    setDeletingDocumentIds(documentIds);
+    setDeleteError(null);
     try {
       const response = await fetch("/api/documents", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ documentId: document.id }),
+        body: JSON.stringify({ documentIds }),
       });
       const responseText = await response.text();
       let result: { error?: string } | null = null;
@@ -138,11 +147,12 @@ export default function ContentLibrary() {
         throw new Error(result?.error || `Could not delete document (status ${response.status})`);
       }
 
-      setDocuments((current) => current.filter((item) => item.id !== document.id));
+      setDocuments((current) => current.filter((item) => !documentIds.includes(item.id)));
+      setSelectedDocumentIds((current) => current.filter((id) => !documentIds.includes(id)));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Could not delete document.");
+      setDeleteError(error instanceof Error ? error.message : "Could not delete the selected documents.");
     } finally {
-      setDeletingDocumentId(null);
+      setDeletingDocumentIds([]);
     }
   }
 
@@ -203,39 +213,92 @@ export default function ContentLibrary() {
             </div>
           ) : (
             <div>
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-zinc-900">
-                  Your Content
-                </h2>
-
-                <p className="mt-1 text-sm text-zinc-500">
-                  {documents.length} document
-                  {documents.length !== 1 ? "s" : ""} in your library
-                </p>
+              <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-900">Your Content</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    {documents.length} document{documents.length !== 1 ? "s" : ""} in your library
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {!selectionMode ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectionMode(true)}
+                      className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900"
+                    >
+                      Select files
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDocumentIds(
+                          selectedDocumentIds.length === documents.length ? [] : documents.map((document) => document.id)
+                        )}
+                        className="text-sm font-medium text-zinc-600 transition hover:text-zinc-900"
+                      >
+                        {selectedDocumentIds.length === documents.length ? "Clear all" : "Select all"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectionMode(false);
+                          setSelectedDocumentIds([]);
+                        }}
+                        className="text-sm font-medium text-zinc-600 transition hover:text-zinc-900"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                  {selectionMode && selectedDocumentIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDocuments(selectedDocumentIds)}
+                      disabled={deletingDocumentIds.length > 0}
+                      className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingDocumentIds.length > 0 ? "Deleting…" : `Delete ${selectedDocumentIds.length} selected`}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {deleteError && <p className="mb-5 text-sm text-red-600">{deleteError}</p>}
+
+              {selectionMode && (
+                <p className="mb-4 text-sm text-zinc-500">Tap files to select them for deletion.</p>
+              )}
 
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {documents.map((document) => (
                   <div
                     key={document.id}
-                    className="rounded-2xl border border-zinc-200 bg-white p-6 transition hover:border-zinc-300 hover:shadow-sm"
+                    role={selectionMode ? "button" : undefined}
+                    tabIndex={selectionMode ? 0 : undefined}
+                    onClick={selectionMode ? () => toggleDocumentSelection(document.id) : undefined}
+                    onKeyDown={selectionMode ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        toggleDocumentSelection(document.id);
+                      }
+                    } : undefined}
+                    className={`rounded-2xl border bg-white p-6 transition hover:shadow-sm ${selectionMode ? "cursor-pointer" : ""} ${selectedDocumentIds.includes(document.id) ? "border-violet-500 ring-2 ring-violet-200" : "border-zinc-200 hover:border-zinc-300"}`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-zinc-100 text-xl">
                         📄
                       </div>
 
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          document.status === "ready"
-                            ? "bg-green-50 text-green-700"
-                            : document.status === "error"
-                            ? "bg-red-50 text-red-700"
-                            : "bg-yellow-50 text-yellow-700"
-                        }`}
-                      >
-                        {document.status}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className={`rounded-full px-3 py-1 text-xs font-medium ${document.status === "ready" ? "bg-green-50 text-green-700" : document.status === "error" ? "bg-red-50 text-red-700" : "bg-yellow-50 text-yellow-700"}`}>
+                          {document.status}
+                        </span>
+                        {selectionMode && selectedDocumentIds.includes(document.id) && (
+                          <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700">Selected</span>
+                        )}
+                      </div>
                     </div>
 
                     <h3 className="mt-5 truncate text-lg font-semibold text-zinc-900">
@@ -249,14 +312,16 @@ export default function ContentLibrary() {
                       ).toLocaleDateString()}
                     </p>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteDocument(document)}
-                      disabled={deletingDocumentId === document.id}
-                      className="mt-5 text-sm font-medium text-red-600 transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {deletingDocumentId === document.id ? "Deleting…" : "Delete file"}
-                    </button>
+                    {!selectionMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDocuments([document.id])}
+                        disabled={deletingDocumentIds.length > 0}
+                        className="mt-5 text-sm font-medium text-red-600 transition hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingDocumentIds.includes(document.id) ? "Deleting…" : "Delete file"}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

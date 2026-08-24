@@ -91,10 +91,6 @@ export default function TalkShowDetails() {
 
   async function handleDeleteTalkShow() {
     if (!talkShow) return;
-    if (!window.confirm(`Delete “${talkShow.name}”? Your library PDFs will not be deleted.`)) {
-      return;
-    }
-
     setDeletingTalkShow(true);
     try {
       await deleteTalkShow(talkShow.id);
