@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Bell, CheckCircle2, FileCheck2, Library, Mic } from "lucide-react";
 import Sidebar from "./Components/sidebar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/user-display";
@@ -95,7 +96,7 @@ export default function Home() {
 
           <div className="flex items-center gap-4">
             <button className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 transition hover:bg-zinc-50">
-              🔔
+              <Bell className="h-5 w-5" />
             </button>
 
             <div ref={menuRef} className="relative">
@@ -150,8 +151,8 @@ export default function Home() {
                     </p>
                   </div>
 
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
-                    🎙
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                    <Mic className="h-5 w-5" />
                   </div>
                 </div>
 
@@ -175,8 +176,8 @@ export default function Home() {
                     </p>
                   </div>
 
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
-                    📚
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Library className="h-5 w-5" />
                   </div>
                 </div>
 
@@ -200,8 +201,8 @@ export default function Home() {
                     </p>
                   </div>
 
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
-                    ◷
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                    <FileCheck2 className="h-5 w-5" />
                   </div>
                 </div>
 
@@ -225,8 +226,8 @@ export default function Home() {
                     </p>
                   </div>
 
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100">
-                    ✓
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-50 text-green-600">
+                    <CheckCircle2 className="h-5 w-5" />
                   </div>
                 </div>
 
