@@ -16,6 +16,7 @@ import {
   type LivePreferences,
 } from "@/lib/live-preferences";
 import { recordActivity } from "@/lib/recent-activity";
+import type { MatchResult } from "@/lib/match-types";
 
 function getRelayWebSocketUrl() {
   if (process.env.NEXT_PUBLIC_RELAY_WS_URL) {
@@ -26,17 +27,24 @@ function getRelayWebSocketUrl() {
   return `${protocol}://${window.location.hostname}:3001`;
 }
 
-type MatchResult = {
-  tier: "keyword" | "semantic" | null;
-  content: string | null;
-  similarity?: number;
-  matchedTags?: string[];
-};
-
 type RelayMessage =
   | { type: "ready" }
   | { type: "error"; message: string }
-  | { type: "transcript"; transcript: string; is_final: boolean };
+  | { type: "transcript"; transcript: string; is_final: boolean }
+  | { type: "utterance_end" };
+
+// Same-window heuristic for picking the best match among several final
+// segments Deepgram split out of one spoken thought — not a global ranking.
+// Keyword tier is trusted if it hits at all, so it always outranks semantic.
+function scoreForMatch(result: MatchResult): number {
+  if (result.tier === "keyword") return 10 + (result.matchedTags?.length ?? 0);
+  if (result.tier === "semantic") return result.similarity ?? 0;
+  return 0;
+}
+
+// Cheap client-side pre-check so an explicit "slide on ___" command still
+// reaches /api/match even when automatic detection is toggled off.
+const SLIDE_COMMAND_HINT = /slide on/i;
 
 type LibraryDocument = {
   id: string;
@@ -285,6 +293,8 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
   const closedByUserRef = useRef(false);
   const connectedRef = useRef(false);
   const connectionErrorRef = useRef<string | null>(null);
+  const bestInWindowRef = useRef<MatchResult | null>(null);
+  const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!talkShowId) return;
@@ -331,8 +341,43 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
       .forEach((track) => track.stop());
 
     socketRef.current?.close();
+
+    if (windowTimerRef.current) clearTimeout(windowTimerRef.current);
   };
 }, []);
+
+  function displayMatch(result: MatchResult) {
+    setMatch(result);
+
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      const title =
+        result.kind === "command"
+          ? `You selected: ${result.matchedHeading ?? result.commandPhrase}`
+          : result.matchedTags?.[0] || "Detected information";
+
+      socketRef.current.send(
+        JSON.stringify({
+          type: "display",
+          title,
+          content: result.content,
+          source: talkShow?.name,
+          kind: result.kind,
+        })
+      );
+    }
+  }
+
+  function flushBestInWindow() {
+    if (windowTimerRef.current) {
+      clearTimeout(windowTimerRef.current);
+      windowTimerRef.current = null;
+    }
+
+    if (bestInWindowRef.current) {
+      displayMatch(bestInWindowRef.current);
+      bestInWindowRef.current = null;
+    }
+  }
 
   async function checkMatch(segment: string) {
     setMatching(true);
@@ -351,21 +396,31 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
       const result: MatchResult = await res.json();
 
-      if (result.tier && result.content) {
-        setMatch(result);
-
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(
-            JSON.stringify({
-              type: "display",
-              title: result.matchedTags?.[0] || "Detected information",
-              content: result.content,
-              source: talkShow?.name,
-            })
-          );
+      if (result.kind === "command") {
+        // An explicit command is a single decisive action — bypass the
+        // grouping window entirely and override whatever was showing.
+        if (windowTimerRef.current) {
+          clearTimeout(windowTimerRef.current);
+          windowTimerRef.current = null;
         }
-      } else {
-        setMatch(null);
+        bestInWindowRef.current = null;
+
+        if (result.tier && result.content) {
+          displayMatch(result);
+        }
+        return;
+      }
+
+      if (!preferences.automaticDetection) return;
+
+      if (result.tier && result.content) {
+        const score = scoreForMatch(result);
+        if (!bestInWindowRef.current || score > scoreForMatch(bestInWindowRef.current)) {
+          bestInWindowRef.current = result;
+        }
+
+        if (windowTimerRef.current) clearTimeout(windowTimerRef.current);
+        windowTimerRef.current = setTimeout(flushBestInWindow, 1200);
       }
     } catch (err) {
       console.error("match request failed", err);
@@ -375,6 +430,11 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
   }
 
   function clearDisplayedContent() {
+    if (windowTimerRef.current) {
+      clearTimeout(windowTimerRef.current);
+      windowTimerRef.current = null;
+    }
+    bestInWindowRef.current = null;
     setMatch(null);
 
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -439,7 +499,12 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
       });
     } catch {
       setStatus("Microphone access denied — check browser permissions");
@@ -500,13 +565,18 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
         return;
       }
 
+      if (data.type === "utterance_end") {
+        flushBestInWindow();
+        return;
+      }
+
       if (data.is_final) {
         const segment: string = data.transcript;
 
         setFinalText((prev) => prev + segment + " ");
         setInterimText("");
 
-        if (segment.trim() && preferences.automaticDetection) {
+        if (segment.trim() && (preferences.automaticDetection || SLIDE_COMMAND_HINT.test(segment))) {
           checkMatch(segment);
         }
       } else {
@@ -785,7 +855,9 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
                       <span className="h-2 w-2 rounded-full bg-green-500" />
 
                       <span className="text-sm font-semibold text-green-700">
-                        Relevant information detected
+                        {match.kind === "command"
+                          ? "You selected this slide"
+                          : "Relevant information detected"}
                       </span>
                       </div>
 

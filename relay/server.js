@@ -69,10 +69,10 @@ function clearDisplay(talkShowId) {
 // minute — so this is what stops a stranger from opening a live connection
 // directly against the relay and burning Deepgram minutes on our key.
 function verifyRelayToken(token, talkShowId) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) return false;
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
 
   const [payloadEncoded, signature] = token.split('.');
-  if (!payloadEncoded || !signature) return false;
+  if (!payloadEncoded || !signature) return null;
 
   const expectedSignature = crypto
     .createHmac('sha256', RELAY_AUTH_SECRET)
@@ -85,20 +85,20 @@ function verifyRelayToken(token, talkShowId) {
     signatureBuffer.length !== expectedBuffer.length ||
     !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
   ) {
-    return false;
+    return null;
   }
 
   let payload;
   try {
     payload = JSON.parse(Buffer.from(payloadEncoded, 'base64url').toString('utf8'));
   } catch {
-    return false;
+    return null;
   }
 
-  if (typeof payload.exp !== 'number' || Date.now() > payload.exp) return false;
-  if (payload.tsid !== talkShowId) return false;
+  if (typeof payload.exp !== 'number' || Date.now() > payload.exp) return null;
+  if (payload.tsid !== talkShowId) return null;
 
-  return true;
+  return payload;
 }
 
 let activeLiveConnections = 0;
@@ -138,7 +138,8 @@ wss.on('connection', (clientSocket, request) => {
   }
 
   const token = url.searchParams.get('token');
-  if (!talkShowId || !verifyRelayToken(token, talkShowId)) {
+  const tokenPayload = talkShowId ? verifyRelayToken(token, talkShowId) : null;
+  if (!tokenPayload) {
     console.log('[client] rejected: invalid or expired relay token');
     clientSocket.close(4001, 'Unauthorized');
     return;
@@ -154,11 +155,24 @@ wss.on('connection', (clientSocket, request) => {
   console.log(`[client] connected: live for talk show ${talkShowId} (${activeLiveConnections} active)`);
 
   // Live clients handle microphone audio + Deepgram.
+  const keyterms = Array.isArray(tokenPayload.kt) ? tokenPayload.kt : [];
   const dgConnection = deepgram.listen.live({
     model: 'nova-3',
     language: 'en',
     smart_format: true,
     interim_results: true,
+    // Default endpointing (10ms) splits a spoken sentence into multiple
+    // "final" segments on the slightest pause; 300ms waits for an actual gap.
+    endpointing: 300,
+    // Emits a separate UtteranceEnd event marking when a full spoken thought
+    // ends, independent of the more aggressive is_final segment splitting —
+    // used by the browser to group segments before picking the best match.
+    utterance_end_ms: 1000,
+    vad_events: true,
+    // Biases recognition toward this talk show's own vocabulary (headings +
+    // topic tags), so accented/mispronounced domain terms still transcribe
+    // correctly. nova-3 only; harmless no-op if the list is empty.
+    ...(keyterms.length > 0 ? { keyterm: keyterms } : {}),
   });
 
   let dgOpen = false;
@@ -206,6 +220,13 @@ wss.on('connection', (clientSocket, request) => {
   );
 
   dgConnection.on(
+    LiveTranscriptionEvents.UtteranceEnd,
+    () => {
+      sendToLiveClient({ type: 'utterance_end' });
+    }
+  );
+
+  dgConnection.on(
     LiveTranscriptionEvents.Error,
     (err) => {
       console.error('[deepgram] error', err);
@@ -248,6 +269,7 @@ wss.on('connection', (clientSocket, request) => {
           title: typeof message.title === 'string' ? message.title : 'Detected information',
           content: message.content,
           source: typeof message.source === 'string' ? message.source : undefined,
+          kind: typeof message.kind === 'string' ? message.kind : undefined,
         });
         return;
       }
