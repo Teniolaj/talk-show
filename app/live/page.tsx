@@ -295,6 +295,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
   const connectionErrorRef = useRef<string | null>(null);
   const bestInWindowRef = useRef<MatchResult | null>(null);
   const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recentTranscriptRef = useRef("");
 
   useEffect(() => {
     if (!talkShowId) return;
@@ -407,6 +408,8 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
         if (result.tier && result.content) {
           displayMatch(result);
+        } else if (result.message) {
+          setStatus(result.message);
         }
         return;
       }
@@ -494,6 +497,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     setFinalText("");
     setInterimText("");
     setMatch(null);
+    recentTranscriptRef.current = "";
 
     let stream: MediaStream;
 
@@ -572,12 +576,14 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
       if (data.is_final) {
         const segment: string = data.transcript;
+        const matchableTranscript = `${recentTranscriptRef.current} ${segment}`.trim().slice(-500);
+        recentTranscriptRef.current = matchableTranscript;
 
         setFinalText((prev) => prev + segment + " ");
         setInterimText("");
 
-        if (segment.trim() && (preferences.automaticDetection || SLIDE_COMMAND_HINT.test(segment))) {
-          checkMatch(segment);
+        if (segment.trim() && (preferences.automaticDetection || SLIDE_COMMAND_HINT.test(matchableTranscript))) {
+          checkMatch(matchableTranscript);
         }
       } else {
         setInterimText(data.transcript);
