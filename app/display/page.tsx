@@ -16,6 +16,7 @@ type DisplayContent = {
   title?: string;
   content: string;
   source?: string;
+  kind?: "command" | "auto";
 };
 
 export default function DisplayPage() {
@@ -106,7 +107,7 @@ function DisplayScreen() {
               <>
                 <div className="mx-auto mb-8 inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-violet-300" />
-                  Detected information
+                  {display.kind === "command" ? "Presenter selected" : "Detected information"}
                 </div>
 
                 <p className="mx-auto max-w-4xl text-lg font-medium uppercase tracking-[0.22em] text-zinc-400 sm:text-xl">

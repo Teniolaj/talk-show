@@ -13,8 +13,8 @@ function getSecret(): string {
   return secret;
 }
 
-export function issueRelayToken(userId: string, talkShowId: string): string {
-  const payload = JSON.stringify({ uid: userId, tsid: talkShowId, exp: Date.now() + TOKEN_TTL_MS });
+export function issueRelayToken(userId: string, talkShowId: string, keyterms: string[] = []): string {
+  const payload = JSON.stringify({ uid: userId, tsid: talkShowId, kt: keyterms, exp: Date.now() + TOKEN_TTL_MS });
   const payloadEncoded = Buffer.from(payload).toString("base64url");
   const signature = createHmac("sha256", getSecret()).update(payloadEncoded).digest("base64url");
   return `${payloadEncoded}.${signature}`;
