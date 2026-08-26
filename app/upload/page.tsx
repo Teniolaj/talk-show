@@ -128,7 +128,7 @@ function UploadForm() {
     <div className="mx-auto max-w-2xl px-5 py-16">
       <h1 className="text-xl font-semibold">Talkshow — Upload Source Material</h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Upload PDF, DOCX, or PPTX files for this presentation. Up to {CONCURRENCY} process at once;
+        Upload PDF, DOCX, or PPTX files for this presentation. PowerPoint decks are automatically split into searchable slides. Up to {CONCURRENCY} process at once;
         each is chunked and embedded independently, then becomes matchable from the{" "}
         <a href="/live" className="underline">
           live

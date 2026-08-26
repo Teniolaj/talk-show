@@ -29,10 +29,14 @@ const COMMAND_FUZZY_THRESHOLD = 0.4;
 // single literal phrase rather than a list of paraphrases — kept predictable
 // for the presenter to rely on. Matches anywhere in the segment, so natural
 // filler before it ("I'm talking about slide on pricing") works for free.
-const SLIDE_COMMAND_PATTERN = /\bslide on\s+(.+)/i;
+const SLIDE_COMMAND_PATTERN = /\bslides? on\s+(.+)/i;
+const BIBLE_BOOKS = [
+  "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth", "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther", "Job", "Psalms", "Psalm", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations", "Ezekiel", "Daniel", "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi", "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians", "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians", "1 Timothy", "2 Timothy", "Titus", "Philemon", "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation",
+].sort((a, b) => b.length - a.length);
 
 type Chunk = {
   id: string;
+  document_id: string;
   content: string;
   topic_tags: string[] | null;
   heading: string | null;
@@ -61,6 +65,69 @@ function extractSlideCommandPhrase(transcript: string): string | null {
   return phrase.length >= 2 ? phrase : null;
 }
 
+function normalizeForHeading(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function findMentionedHeading(transcript: string, chunks: Chunk[]): Chunk | null {
+  const normalizedTranscript = normalizeForHeading(transcript);
+  const uniqueHeadings = new Set<string>();
+
+  for (const chunk of chunks) {
+    const heading = chunk.heading?.trim();
+    if (!heading) continue;
+    const normalizedHeading = normalizeForHeading(heading);
+    const genericHeading = /^(?:untitled|presentation|slide\s*\d*)$/.test(normalizedHeading);
+    // Exact whole-heading mentions work for both a one-word PDF section such
+    // as "Conclusion" and a full slide title, while ignoring deck chrome.
+    if (
+      normalizedHeading.length >= 3 &&
+      !genericHeading &&
+      ` ${normalizedTranscript} `.includes(` ${normalizedHeading} `)
+    ) {
+      uniqueHeadings.add(heading);
+    }
+  }
+
+  if (uniqueHeadings.size !== 1) return null;
+  return chunks.find((chunk) => chunk.heading === [...uniqueHeadings][0]) ?? null;
+}
+
+type BibleReference = { book: string; chapter: string; verse: string };
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseBibleReference(transcript: string): BibleReference | null {
+  const books = BIBLE_BOOKS.map(escapeRegExp).join("|");
+  const match = transcript.match(new RegExp(`\\b(${books})\\s+(\\d{1,3})(?:\\s*[:.]\\s*|\\s+)(\\d{1,3})\\b`, "i"));
+  if (!match) return null;
+  const book = BIBLE_BOOKS.find((candidate) => candidate.toLowerCase() === match[1].toLowerCase()) ?? match[1];
+  return { book, chapter: match[2], verse: match[3] };
+}
+
+function verseFromChunk(content: string, reference: BibleReference): string {
+  const verseLine = new RegExp(`(?:^|\\n)\\s*${reference.verse}[.:)]?\\s+([\\s\\S]*?)(?=\\n\\s*\\d{1,3}[.:)]?\\s+|$)`, "m").exec(content);
+  if (!verseLine?.[1]) return content;
+  return `${reference.book} ${reference.chapter}:${reference.verse}\n${verseLine[1].trim()}`;
+}
+
+function findBibleVerse(reference: BibleReference, chunks: Chunk[]): { chunk: Chunk; content: string } | null {
+  const bookPattern = escapeRegExp(reference.book).replace(/ /g, "\\s+");
+  const fullReference = new RegExp(`\\b${bookPattern}\\s+${reference.chapter}\\s*[:.]?\\s*${reference.verse}\\b`, "i");
+  const chapterReference = new RegExp(`\\b${bookPattern}\\s+${reference.chapter}\\b`, "i");
+  const verseMarker = new RegExp(`(?:^|\\n)\\s*${reference.verse}[.:)]?\\s+`, "m");
+
+  const exact = chunks.find((chunk) => fullReference.test(`${chunk.heading ?? ""}\n${chunk.content}`));
+  if (exact) return { chunk: exact, content: verseFromChunk(exact.content, reference) };
+
+  const chapterChunk = chunks.find(
+    (chunk) => chapterReference.test(chunk.heading ?? "") && verseMarker.test(chunk.content)
+  );
+  return chapterChunk ? { chunk: chapterChunk, content: verseFromChunk(chapterChunk.content, reference) } : null;
+}
+
 function parseEmbedding(embedding: string | number[] | null): number[] | null {
   if (!embedding) return null;
   if (Array.isArray(embedding)) return embedding;
@@ -81,6 +148,19 @@ function cosineSimilarity(a: number[], b: number[]): number {
     normB += b[i] * b[i];
   }
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+function fullSlideContent(selectedChunk: Chunk, chunks: Chunk[]): string {
+  const heading = selectedChunk.heading?.trim();
+  if (!heading) return selectedChunk.content;
+
+  // A longer slide can be stored as more than one chunk. Keep all chunks for
+  // the same document + heading together so an explicit command displays the
+  // complete slide, rather than whichever fragment Fuse happened to return.
+  const slideChunks = chunks.filter(
+    (chunk) => chunk.document_id === selectedChunk.document_id && chunk.heading?.trim() === heading
+  );
+  return slideChunks.map((chunk) => chunk.content.trim()).filter(Boolean).join("\n\n");
 }
 
 export async function POST(request: Request) {
@@ -132,17 +212,52 @@ export async function POST(request: Request) {
   // not the (much heavier) embedding column.
   const { data: chunks } = await supabase
     .from("repo_chunks")
-    .select("id, content, topic_tags, heading")
+    .select("id, document_id, content, topic_tags, heading")
     .eq("repo_id", user.id)
     .in("document_id", documentIds);
 
   const scopedChunks = (chunks ?? []) as Chunk[];
+  const bibleReference = parseBibleReference(commandPhrase ?? transcript);
+
+  if (bibleReference) {
+    const verse = findBibleVerse(bibleReference, scopedChunks);
+    if (verse) {
+      const title = `${bibleReference.book} ${bibleReference.chapter}:${bibleReference.verse}`;
+      return NextResponse.json({
+        tier: "command",
+        kind: "command",
+        content: verse.content,
+        matchedHeading: title,
+        commandPhrase: commandPhrase ?? title,
+      } satisfies MatchResult);
+    }
+  }
 
   // Tier 0: explicit "slide on X" command — trusted above everything else,
   // and never falls through to auto-detection even on a miss, since showing
   // unrelated auto-matched content right after an explicit ask is worse than
   // showing nothing.
   if (commandPhrase) {
+    if (scopedChunks.length === 0) {
+      return NextResponse.json({
+        tier: null,
+        kind: "command",
+        content: null,
+        commandPhrase,
+        message: "No ingested content was found in this talk show's selected library.",
+      } satisfies MatchResult);
+    }
+
+    if (!scopedChunks.some((chunk) => chunk.heading?.trim())) {
+      return NextResponse.json({
+        tier: null,
+        kind: "command",
+        content: null,
+        commandPhrase,
+        message: "This document has no slide headings yet. Re-ingest it with the slide-heading workflow enabled.",
+      } satisfies MatchResult);
+    }
+
     const commandFuse = new Fuse(scopedChunks, {
       keys: [
         { name: "heading", weight: 0.7 },
@@ -157,7 +272,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         tier: "command",
         kind: "command",
-        content: best.item.content,
+        content: fullSlideContent(best.item, scopedChunks),
         matchedHeading: best.item.heading ?? undefined,
         commandPhrase,
       } satisfies MatchResult);
@@ -168,6 +283,21 @@ export async function POST(request: Request) {
       kind: "command",
       content: null,
       commandPhrase,
+      message: `No slide heading matched “${commandPhrase}”. Try the heading as it appears in the presentation.`,
+    } satisfies MatchResult);
+  }
+
+  // A presenter does not always use the command wording. An unambiguous,
+  // natural mention of a stored slide title (e.g. "now, technology and
+  // productivity") should bring up that slide too.
+  const mentionedHeading = findMentionedHeading(transcript, scopedChunks);
+  if (mentionedHeading) {
+    return NextResponse.json({
+      tier: "keyword",
+      kind: "auto",
+      content: fullSlideContent(mentionedHeading, scopedChunks),
+      matchedHeading: mentionedHeading.heading ?? undefined,
+      matchedTags: [mentionedHeading.heading ?? "Slide"],
     } satisfies MatchResult);
   }
 

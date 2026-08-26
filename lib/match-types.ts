@@ -8,6 +8,7 @@ export type MatchResult = {
   matchedTags?: string[];
   matchedHeading?: string;
   commandPhrase?: string;
+  message?: string;
 };
 
 export type DisplayContent = {

@@ -94,7 +94,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const embedding = $json.embedding.values;\nconst original = $('Chunk & Tag').item.json;\n\nreturn {\n  json: {\n    repo_id: original.repo_id,\n    document_id: original.document_id,\n    content: original.content,\n    topic_tags: original.topic_tags,\n    embedding: embedding,\n  },\n};"
+        "jsCode": "const embedding = $json.embedding.values;\nconst original = $('Chunk & Tag').item.json;\n\nreturn {\n  json: {\n    repo_id: original.repo_id,\n    document_id: original.document_id,\n    heading: original.heading,\n    content: original.content,\n    topic_tags: original.topic_tags,\n    embedding: embedding,\n  },\n};"
       },
       "id": "582441f5-6cc6-4d92-9bc0-84759b5ddc7d",
       "name": "Merge Embedding",
@@ -117,6 +117,10 @@
             {
               "fieldId": "document_id",
               "fieldValue": "={{ $json.document_id }}"
+            },
+            {
+              "fieldId": "heading",
+              "fieldValue": "={{ $json.heading }}"
             },
             {
               "fieldId": "content",
