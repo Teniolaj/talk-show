@@ -5,7 +5,11 @@ import { createHmac } from "crypto";
 // secret shared only between this server and relay/server.js — never sent
 // to the browser directly, so a client can't mint its own tokens or reuse
 // one past its expiry to keep burning Deepgram minutes.
-const TOKEN_TTL_MS = 60_000;
+// 120s rather than a tighter window: a cold relay host (e.g. a sleeping
+// free-tier instance waking up) can take a while just to complete the
+// WebSocket handshake, and a token that expires mid-handshake produces a
+// confusing "session expired" failure on the very first connection attempt.
+const TOKEN_TTL_MS = 120_000;
 
 function getSecret(): string {
   const secret = process.env.RELAY_AUTH_SECRET;

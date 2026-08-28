@@ -68,11 +68,20 @@ function clearDisplay(talkShowId) {
 // session for the owning talk show can get one, and it expires within a
 // minute — so this is what stops a stranger from opening a live connection
 // directly against the relay and burning Deepgram minutes on our key.
+// Returns { payload } on success, or { reason } on failure. Distinguishing
+// *why* a token was rejected (expired vs. bad signature vs. malformed) used
+// to be thrown away — the client only ever saw a generic "service
+// unavailable" close with no explanation. Surfacing the reason makes the
+// next occurrence of this actually diagnosable instead of a guessing game.
 function verifyRelayToken(token, talkShowId) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  if (!token || typeof token !== 'string' || !token.includes('.')) {
+    return { reason: 'missing-token' };
+  }
 
   const [payloadEncoded, signature] = token.split('.');
-  if (!payloadEncoded || !signature) return null;
+  if (!payloadEncoded || !signature) {
+    return { reason: 'malformed-token' };
+  }
 
   const expectedSignature = crypto
     .createHmac('sha256', RELAY_AUTH_SECRET)
@@ -85,21 +94,36 @@ function verifyRelayToken(token, talkShowId) {
     signatureBuffer.length !== expectedBuffer.length ||
     !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
   ) {
-    return null;
+    // Almost always means RELAY_AUTH_SECRET differs between this relay's
+    // environment and the Next.js app that issued the token.
+    return { reason: 'bad-signature' };
   }
 
   let payload;
   try {
     payload = JSON.parse(Buffer.from(payloadEncoded, 'base64url').toString('utf8'));
   } catch {
-    return null;
+    return { reason: 'malformed-token' };
   }
 
-  if (typeof payload.exp !== 'number' || Date.now() > payload.exp) return null;
-  if (payload.tsid !== talkShowId) return null;
+  if (typeof payload.exp !== 'number' || Date.now() > payload.exp) {
+    // Common when the relay was cold (e.g. a sleeping free-tier host waking
+    // up) and the WebSocket handshake itself took longer than the token's
+    // short TTL to complete.
+    return { reason: 'expired-token' };
+  }
+  if (payload.tsid !== talkShowId) return { reason: 'wrong-talk-show' };
 
-  return payload;
+  return { payload };
 }
+
+const TOKEN_REJECTION_MESSAGES = {
+  'missing-token': 'No session token was sent — try refreshing the page.',
+  'malformed-token': 'The session token was malformed — try refreshing the page.',
+  'bad-signature': 'The session token could not be verified — the relay and app may be misconfigured. Contact the app owner.',
+  'expired-token': 'The connection took too long to establish and the session expired — try going live again.',
+  'wrong-talk-show': 'This session token is for a different talk show — try refreshing the page.',
+};
 
 let activeLiveConnections = 0;
 
@@ -138,15 +162,32 @@ wss.on('connection', (clientSocket, request) => {
   }
 
   const token = url.searchParams.get('token');
-  const tokenPayload = talkShowId ? verifyRelayToken(token, talkShowId) : null;
-  if (!tokenPayload) {
-    console.log('[client] rejected: invalid or expired relay token');
-    clientSocket.close(4001, 'Unauthorized');
+  const verification = talkShowId
+    ? verifyRelayToken(token, talkShowId)
+    : { reason: 'missing-talk-show' };
+  if (!verification.payload) {
+    console.log(`[client] rejected: ${verification.reason}`);
+    clientSocket.send(
+      JSON.stringify({
+        type: 'error',
+        message:
+          TOKEN_REJECTION_MESSAGES[verification.reason] ||
+          'This session could not be authorized — try refreshing the page.',
+      })
+    );
+    clientSocket.close(4001, verification.reason);
     return;
   }
+  const tokenPayload = verification.payload;
 
   if (activeLiveConnections >= MAX_CONCURRENT_LIVE_CONNECTIONS) {
     console.log('[client] rejected: too many concurrent live connections');
+    clientSocket.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Too many people are live right now — try again in a moment.',
+      })
+    );
     clientSocket.close(4002, 'Too many concurrent sessions');
     return;
   }

@@ -17,6 +17,7 @@ export async function GET() {
     .from("repo_documents")
     .select("id, file_name, status, created_at")
     .eq("repo_id", user.id)
+    .neq("status", "error")
     .order("created_at", { ascending: false });
 
   if (error) {
