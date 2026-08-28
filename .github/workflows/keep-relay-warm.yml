@@ -1,0 +1,29 @@
+name: Keep relay warm
+
+# Render's free tier spins the relay down after ~15 minutes idle, and the
+# next connection then eats a 30-60s cold-start delay (see DEPLOYMENT.md,
+# "Known trade-off: cold starts on Render's free tier"). Pinging it well
+# inside that window keeps it from ever going idle. GitHub Actions schedules
+# are best-effort and can slip a few minutes under load, so 10 minutes
+# leaves comfortable margin under the 15-minute cutoff.
+#
+# NOTE: GitHub only evaluates cron schedules for workflow files as they
+# exist on the repo's default branch — this won't actually start firing
+# until it's merged there, even though it can be pushed/tested from any
+# branch via workflow_dispatch in the meantime.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping relay health endpoint
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://talk-show.onrender.com/)
+          echo "Relay responded with HTTP $status"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 500 ]; then
+            echo "::warning::Relay ping got an unexpected status ($status) — it may be cold-starting or down."
+          fi

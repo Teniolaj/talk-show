@@ -296,6 +296,11 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
   const bestInWindowRef = useRef<MatchResult | null>(null);
   const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentTranscriptRef = useRef("");
+  // Set on utterance_end, consumed by the next transcript event — clears the
+  // displayed transcript right when the next utterance actually starts,
+  // rather than the moment the previous one ends (so old text stays on
+  // screen through the pause instead of flashing blank).
+  const pendingClearRef = useRef(false);
 
   useEffect(() => {
     if (!talkShowId) return;
@@ -498,6 +503,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     setInterimText("");
     setMatch(null);
     recentTranscriptRef.current = "";
+    pendingClearRef.current = false;
 
     let stream: MediaStream;
 
@@ -571,21 +577,33 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
       if (data.type === "utterance_end") {
         flushBestInWindow();
+        pendingClearRef.current = true;
         return;
       }
 
       if (data.is_final) {
         const segment: string = data.transcript;
-        const matchableTranscript = `${recentTranscriptRef.current} ${segment}`.trim().slice(-500);
+        // Reset alongside the transcript box on a new utterance — otherwise
+        // a stale "slide on X" phrase from the previous utterance stays in
+        // this rolling buffer and the command regex below (which matches
+        // greedily to end-of-string) swallows the new utterance into one
+        // garbled, unmatchable phrase.
+        const priorContext = pendingClearRef.current ? "" : recentTranscriptRef.current;
+        const matchableTranscript = `${priorContext} ${segment}`.trim().slice(-500);
         recentTranscriptRef.current = matchableTranscript;
 
-        setFinalText((prev) => prev + segment + " ");
+        setFinalText((prev) => (pendingClearRef.current ? "" : prev) + segment + " ");
         setInterimText("");
+        pendingClearRef.current = false;
 
         if (segment.trim() && (preferences.automaticDetection || SLIDE_COMMAND_HINT.test(matchableTranscript))) {
           checkMatch(matchableTranscript);
         }
       } else {
+        if (pendingClearRef.current) {
+          setFinalText("");
+          pendingClearRef.current = false;
+        }
         setInterimText(data.transcript);
       }
     };
