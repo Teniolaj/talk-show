@@ -43,8 +43,22 @@ function scoreForMatch(result: MatchResult): number {
 }
 
 // Cheap client-side pre-check so an explicit "slide on ___" command still
-// reaches /api/match even when automatic detection is toggled off.
-const SLIDE_COMMAND_HINT = /slide on/i;
+// reaches /api/match even when automatic detection is toggled off. Mirrors
+// the server's SLIDE_COMMAND_TRIGGER (app/api/match/route.ts) closely enough
+// to gate capture — the server does the authoritative extraction.
+const SLIDE_COMMAND_HINT = /\bslides?\s+on\b/i;
+
+// Once the trigger is heard, how long to wait after the presenter stops
+// producing new final segments before treating the command phrase as
+// complete (Deepgram often splits one spoken heading across several final
+// segments). Short enough to feel responsive, long enough to catch a
+// mid-heading pause.
+const COMMAND_CAPTURE_SILENCE_MS = 800;
+
+// Hard cap on how long capture stays open if the presenter never pauses
+// after the trigger (e.g. runs straight on into other remarks) — without
+// this, capture could keep absorbing speech indefinitely and never resolve.
+const COMMAND_CAPTURE_MAX_MS = 6000;
 
 type LibraryDocument = {
   id: string;
@@ -302,6 +316,19 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
   // screen through the pause instead of flashing blank).
   const pendingClearRef = useRef(false);
 
+  // Dedicated buffer for the explicit "slide on ___" command, separate from
+  // recentTranscriptRef (automatic-detection context). While capturing,
+  // subsequent final segments are diverted here instead of being appended to
+  // the auto-detection buffer or re-triggering a fresh command check — this
+  // is what stops "show me the slide on X" plus everything said right after
+  // it from bleeding into (and corrupting) the command match. Capture closes
+  // itself back down once resolved, so nothing is captured again until the
+  // trigger phrase is heard once more.
+  const commandCaptureRef = useRef(false);
+  const commandBufferRef = useRef("");
+  const commandCaptureStartRef = useRef<number | null>(null);
+  const commandResolveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!talkShowId) return;
     getTalkShow(talkShowId).then(setTalkShow);
@@ -349,6 +376,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     socketRef.current?.close();
 
     if (windowTimerRef.current) clearTimeout(windowTimerRef.current);
+    if (commandResolveTimerRef.current) clearTimeout(commandResolveTimerRef.current);
   };
 }, []);
 
@@ -437,6 +465,24 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     }
   }
 
+  // Closes command capture and sends whatever was heard since the trigger.
+  // Called either after a silence pause or once COMMAND_CAPTURE_MAX_MS is
+  // hit — either way, capture is off again afterward until "slide on" (or
+  // "slides on") is heard fresh.
+  function resolveCommandCapture() {
+    if (commandResolveTimerRef.current) {
+      clearTimeout(commandResolveTimerRef.current);
+      commandResolveTimerRef.current = null;
+    }
+
+    const phrase = commandBufferRef.current.trim();
+    commandBufferRef.current = "";
+    commandCaptureRef.current = false;
+    commandCaptureStartRef.current = null;
+
+    if (phrase) checkMatch(phrase);
+  }
+
   function clearDisplayedContent() {
     if (windowTimerRef.current) {
       clearTimeout(windowTimerRef.current);
@@ -504,6 +550,13 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     setMatch(null);
     recentTranscriptRef.current = "";
     pendingClearRef.current = false;
+    if (commandResolveTimerRef.current) {
+      clearTimeout(commandResolveTimerRef.current);
+      commandResolveTimerRef.current = null;
+    }
+    commandCaptureRef.current = false;
+    commandBufferRef.current = "";
+    commandCaptureStartRef.current = null;
 
     let stream: MediaStream;
 
@@ -577,26 +630,57 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
       if (data.type === "utterance_end") {
         flushBestInWindow();
+        // A natural pause is the clearest signal a command phrase is
+        // complete — resolve it immediately rather than waiting out the
+        // silence timer.
+        if (commandCaptureRef.current) resolveCommandCapture();
         pendingClearRef.current = true;
         return;
       }
 
       if (data.is_final) {
         const segment: string = data.transcript;
-        // Reset alongside the transcript box on a new utterance — otherwise
-        // a stale "slide on X" phrase from the previous utterance stays in
-        // this rolling buffer and the command regex below (which matches
-        // greedily to end-of-string) swallows the new utterance into one
-        // garbled, unmatchable phrase.
-        const priorContext = pendingClearRef.current ? "" : recentTranscriptRef.current;
-        const matchableTranscript = `${priorContext} ${segment}`.trim().slice(-500);
-        recentTranscriptRef.current = matchableTranscript;
+        const isNewUtterance = pendingClearRef.current;
 
-        setFinalText((prev) => (pendingClearRef.current ? "" : prev) + segment + " ");
+        setFinalText((prev) => (isNewUtterance ? "" : prev) + segment + " ");
         setInterimText("");
         pendingClearRef.current = false;
 
-        if (segment.trim() && (preferences.automaticDetection || SLIDE_COMMAND_HINT.test(matchableTranscript))) {
+        if (!segment.trim()) return;
+
+        // Trigger-gated command capture: once "slide on"/"slides on" is
+        // heard, everything the presenter says next is diverted here (not
+        // into the auto-detection buffer, and not re-checked as a fresh
+        // command) until capture resolves — at which point it goes quiet
+        // again until the trigger is said once more.
+        if (commandCaptureRef.current || SLIDE_COMMAND_HINT.test(segment)) {
+          if (!commandCaptureRef.current) {
+            commandCaptureRef.current = true;
+            commandCaptureStartRef.current = Date.now();
+            commandBufferRef.current = "";
+          }
+
+          commandBufferRef.current = `${commandBufferRef.current} ${segment}`.trim();
+
+          if (commandResolveTimerRef.current) clearTimeout(commandResolveTimerRef.current);
+
+          const elapsed = Date.now() - (commandCaptureStartRef.current ?? Date.now());
+          if (elapsed >= COMMAND_CAPTURE_MAX_MS) {
+            resolveCommandCapture();
+          } else {
+            commandResolveTimerRef.current = setTimeout(resolveCommandCapture, COMMAND_CAPTURE_SILENCE_MS);
+          }
+          return;
+        }
+
+        // Reset alongside the transcript box on a new utterance — otherwise
+        // stale context from the previous utterance stays in this rolling
+        // buffer and gets folded into the next match.
+        const priorContext = isNewUtterance ? "" : recentTranscriptRef.current;
+        const matchableTranscript = `${priorContext} ${segment}`.trim().slice(-500);
+        recentTranscriptRef.current = matchableTranscript;
+
+        if (preferences.automaticDetection) {
           checkMatch(matchableTranscript);
         }
       } else {
@@ -647,6 +731,14 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
   function stop() {
     closedByUserRef.current = true;
+
+    if (commandResolveTimerRef.current) {
+      clearTimeout(commandResolveTimerRef.current);
+      commandResolveTimerRef.current = null;
+    }
+    commandCaptureRef.current = false;
+    commandBufferRef.current = "";
+    commandCaptureStartRef.current = null;
 
     if (
       mediaRecorderRef.current &&
