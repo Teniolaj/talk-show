@@ -413,22 +413,26 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
     }
   }
 
+  async function fetchMatch(segment: string): Promise<MatchResult> {
+    const res = await fetch("/api/match", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        transcript: segment,
+        talkShowId,
+      }),
+    });
+
+    return res.json();
+  }
+
   async function checkMatch(segment: string) {
     setMatching(true);
 
     try {
-      const res = await fetch("/api/match", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          transcript: segment,
-          talkShowId,
-        }),
-      });
-
-      const result: MatchResult = await res.json();
+      const result = await fetchMatch(segment);
 
       if (result.kind === "command") {
         // An explicit command is a single decisive action — bypass the
@@ -462,6 +466,34 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
       console.error("match request failed", err);
     } finally {
       setMatching(false);
+    }
+  }
+
+  // Fired after every segment appended during capture, in parallel with the
+  // silence/max-cap timers rather than instead of them. If what's captured
+  // so far already confidently identifies one slide (the server only
+  // returns a command-tier result once it's ruled out ambiguity — see
+  // isCloseCompetitor in app/api/match/route.ts), resolve right away instead
+  // of waiting out the silence window while the presenter keeps talking past
+  // the heading. An ambiguous or no-match result is left alone: the timers
+  // keep capture open so more words can disambiguate it, exactly as before.
+  async function probeCommandCapture(phraseAtProbeTime: string) {
+    const result = await fetchMatch(phraseAtProbeTime);
+
+    // The buffer may have moved on (more speech appended) or capture may
+    // have already resolved via the silence/max-cap timers while this
+    // request was in flight — a stale probe must not act on old state.
+    if (!commandCaptureRef.current || commandBufferRef.current !== phraseAtProbeTime) return;
+
+    if (result.kind === "command" && result.tier === "command" && result.content) {
+      if (commandResolveTimerRef.current) {
+        clearTimeout(commandResolveTimerRef.current);
+        commandResolveTimerRef.current = null;
+      }
+      commandBufferRef.current = "";
+      commandCaptureRef.current = false;
+      commandCaptureStartRef.current = null;
+      displayMatch(result);
     }
   }
 
@@ -669,6 +701,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
             resolveCommandCapture();
           } else {
             commandResolveTimerRef.current = setTimeout(resolveCommandCapture, COMMAND_CAPTURE_SILENCE_MS);
+            probeCommandCapture(commandBufferRef.current);
           }
           return;
         }
