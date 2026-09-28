@@ -673,10 +673,8 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
       if (data.is_final) {
         const segment: string = data.transcript;
         const isNewUtterance = pendingClearRef.current;
-
-        setFinalText((prev) => (isNewUtterance ? "" : prev) + segment + " ");
-        setInterimText("");
         pendingClearRef.current = false;
+        setInterimText("");
 
         if (!segment.trim()) return;
 
@@ -684,15 +682,23 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
         // heard, everything the presenter says next is diverted here (not
         // into the auto-detection buffer, and not re-checked as a fresh
         // command) until capture resolves — at which point it goes quiet
-        // again until the trigger is said once more.
+        // again until the trigger is said once more. The transcript box
+        // mirrors this same window: it only fills in while capture is open,
+        // so the presenter's mic stays "listening" in the background the
+        // rest of the time without anything showing up on screen.
         if (commandCaptureRef.current || SLIDE_COMMAND_HINT.test(segment)) {
-          if (!commandCaptureRef.current) {
+          const isCaptureStart = !commandCaptureRef.current;
+          if (isCaptureStart) {
             commandCaptureRef.current = true;
             commandCaptureStartRef.current = Date.now();
             commandBufferRef.current = "";
           }
 
           commandBufferRef.current = `${commandBufferRef.current} ${segment}`.trim();
+          // Replaces (not appends to) whatever the box was showing — the
+          // previous capture's phrase stays visible right up until a fresh
+          // "slide on" starts a new one.
+          setFinalText(commandBufferRef.current + " ");
 
           if (commandResolveTimerRef.current) clearTimeout(commandResolveTimerRef.current);
 
@@ -706,9 +712,12 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
           return;
         }
 
-        // Reset alongside the transcript box on a new utterance — otherwise
-        // stale context from the previous utterance stays in this rolling
-        // buffer and gets folded into the next match.
+        // Reset alongside the auto-detection buffer on a new utterance —
+        // otherwise stale context from the previous utterance stays in this
+        // rolling buffer and gets folded into the next match. This buffer
+        // (and the /api/match calls below) run silently in the background —
+        // they never touch the transcript box, only the capture branch above
+        // does.
         const priorContext = isNewUtterance ? "" : recentTranscriptRef.current;
         const matchableTranscript = `${priorContext} ${segment}`.trim().slice(-500);
         recentTranscriptRef.current = matchableTranscript;
@@ -717,11 +726,12 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
           checkMatch(matchableTranscript);
         }
       } else {
-        if (pendingClearRef.current) {
-          setFinalText("");
-          pendingClearRef.current = false;
+        // Only surface interim (non-final) text while a command phrase is
+        // actively being captured — otherwise background speech would flash
+        // through the transcript box before we even know it's not a trigger.
+        if (commandCaptureRef.current) {
+          setInterimText(data.transcript);
         }
-        setInterimText(data.transcript);
       }
     };
 
@@ -916,11 +926,11 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
               <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-5">
                 <div>
                   <h2 className="font-semibold text-zinc-900">
-                    Conversation
+                    Slide command
                   </h2>
 
                   <p className="mt-1 text-xs text-zinc-500">
-                    Live transcript
+                    Shows what you said after &quot;slide on&quot;
                   </p>
                 </div>
 
@@ -963,7 +973,7 @@ export function LiveControl({ talkShowId }: { talkShowId: string }) {
 
                       <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-500">
                         {isLive
-                          ? "Start speaking and your conversation will appear here."
+                          ? 'Say "slide on" followed by a topic — it\'ll appear here.'
                           : "Start the live session to begin listening to the conversation."}
                       </p>
                     </div>
