@@ -1,0 +1,42 @@
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Supabase heartbeat table
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          body_file="$(mktemp)"
+          status="$(curl -sS -o "$body_file" -w '%{http_code}' \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            "$SUPABASE_URL/rest/v1/heartbeat?select=id,last_ping&limit=1")"
+          echo "HTTP status: $status"
+          echo "Response body:"
+          cat "$body_file"
+          echo
+          if [ "$status" != "200" ]; then
+            echo "Supabase ping failed with status $status"
+            exit 1
+          fi
+
+  keepalive:
+    needs: ping
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: liskin/gh-workflow-keepalive@v1

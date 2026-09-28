@@ -153,7 +153,7 @@ export default function SettingsPage() {
 
           <SettingsSection title="Live session" description="These preferences take effect when you start your next live session.">
             <div className="divide-y divide-zinc-100">
-              <PreferenceRow title="Show live transcript" description="Show the ongoing transcript in the live control room." checked={preferences.showLiveTranscript} onChange={() => updatePreference("showLiveTranscript")} />
+              <PreferenceRow title="Show live transcript" description="Show what was said after 'slide on' in the live control room." checked={preferences.showLiveTranscript} onChange={() => updatePreference("showLiveTranscript")} />
               <PreferenceRow title="Automatic detection" description="Cross-check spoken segments against your selected content automatically." checked={preferences.automaticDetection} onChange={() => updatePreference("automaticDetection")} />
             </div>
           </SettingsSection>
